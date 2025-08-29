@@ -499,7 +499,7 @@ client.set_event_callback("paint", function()
     end
 if ui.get(resolver_enabled) == true then
     local r,g,b,a = ui.get(color)
-    renderer.indicator(143, 194, 21, 255, "\a"..rgba_to_hex(r,g,b,a * math.abs(math.cos(globals.curtime()*1))).."AIMBRUTE")
+    renderer.indicator(143, 194, 21, 255, "\a"..rgba_to_hex(r,g,b,a * math.abs(math.cos(globals.curtime()*1))).."AIMHELPER")
 end
 
 

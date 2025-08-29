@@ -504,7 +504,7 @@ local menu do
     local setup = tabs.aa:combobox("Setup", {
         "None", "Crosshair Indicator", "Damage Indicator", "Manual Yaw Indicator", 
         "Custom Scope", "Thirdperson Distance", "Ragebot Logs", "Shot Marker",
-        "Bullet Tracer", "Damage Helper", "Resolver", "Predict", "Console Filter", "Trashtalk",
+        "Bullet Tracer", "Damage Helper", "Predict", "Console Filter", "Trashtalk",
         "Watermark", "Hitchance Modifier", "Aspect Ratio", "Viewmodel",
          "Animations", "Clantag", "Stickman", "Angelic Tap",
         "Velocity Warning", "Defensive indicator", "Gamesense Indicator",
@@ -1031,21 +1031,6 @@ local Predict = {} do
     end
 
     Features.Predict = Predict
-end
-
-
-local resolver = {} do
-    resolver = create.element(tabs.aa, "Resolver")
-
-    resolver.enable = tabs.aa:checkbox("Enable Resolver")
-    resolver.used = tabs.aa:checkbox("Used elements? resolver")
-    resolver.used:depend({setup, 'resolver'})
-
-    if not resolver.used.value then
-        resolver.enable:set(true)
-    end
-
-    Features.resolver = resolver
 end
 
 local mantletap = {} do
@@ -2119,7 +2104,7 @@ local ragelogs do
             col = (utils.to_hex(col)):sub(1,6)
             pui.macros.col = '\a'..col
             utils.printc(pui.format(
-                "\f<r>[\f<col>-\f<r>] ~ Miss "..
+                "\f<r>[\f<col>+\f<r>] ~ Miss "..
                 "\f<col>"..entity.get_player_name(e.target).."\f<r>'s "..
                 "\f<col>"..(hitgroups[e.hitgroup] or "?")..
                 "\f<r> due to \f<col>"..e.reason.."\f<r>"..
@@ -3027,6 +3012,97 @@ local trashtalk do
 {"ver4ual лапал меня там...", "и снимал на камеру..."},
 {"kennex трогал меня там...", "и выложил видео сюда", "dsc.gg/regicidelua"},
 {"да направит тебя аллах твой ебучий", "иншалах пидорасу"},
+        }},
+        death = {1, {
+            {"сука хуесос","нахуй ты тут сидиш потеешь","выйди в кд грязь"},
+            {"ну хуесос","что ты сделал"},
+            {"сын шлюхи", "1x1 2x2 прям сейчас?"},
+            {"хуесос","на подпике"},
+            {"хуя"},
+            {"хуесос","пытайся дальше"},
+            {"не","как эьа хуйня убивает","это пиздец"},
+            {"м","забавно"},
+            {"ебанат","фулл опен стоит"},
+            {"ну как оно меня убивает","ну что это такео"},
+            {"опять","меня убивает", "тупорылый","фу блять"},
+            {"ишак","куда ты так"},
+            {"ну фу","что ты делаеш"},
+            {"сын шлюхи","1х1 2х2 прям щас?"},
+            {"уебище","нахуй ты сидишь потеешь","уебок ебаный"},
+            {"блядт мусор господи","не ливай нахуй щас ты хуй сосать пойдёшь","бич бля"},
+            {"о боже сука","снова лишний вес планеты убил"},
+            {"мда"},
+            {"сыну бляди же повезет"},
+            {"ну фу","как меня хуйня","прыщавая убивает"},
+            {"глупый даун","после некст раунда можешь с жизни ливать"},
+            {"убил меня?","теперь сиди и жди","хуесос нищий"},
+            {"csy","сын шлюхи","ттупой"},
+            {"не","этот сочник пикнет"},
+            {"отмена", 'сын шлюхи', 'что ты делаешь'},
+            {"ну", 'что ты делашеь'},
+            {"не ожидал что ты настолько тупорылый", 'запишу тебя в тетрадь сочников'},
+            {'красава', 'лучший просто'},
+            {'мразота потеет'},
+           {'уебище','сидит потеет'},
+           {"я еду в австрию", "бить эзотерику ебало"},
+         {'отмена','сын шлюхи'},
+         {'ну конечно','я просто похлопаю тебе'},
+         {'пошли 1х1 сын блядоты','дс опрокинь свой'},
+         {'блядина','нахуй ты сидишь потееш','выйди в кд грязб'},
+        {'щас поиграем клоун','ливнешь мать шалава здохнет'},
+         {'фу','ну он же байтится','и както убивает меня'},
+         {'отмена','сын шлюхи'},
+         {'хаахахах','что ты нахуй делаешь'},
+        {'фу'},
+         {'нет','хуесос тупой'},
+         {'опять','меня убивает','тупорылый','фу блять'},
+         {'без пота слабо хуйня?'},
+         {'мразота потеет'},
+         {'фу уебище ебаное'},
+        {'я стрельнул?'},
+         {'изи мапа'},
+        {'м','забавно'},
+        {'ну','что ты дулаешь'},
+         {'ебанат','фулл опен стоит'},
+          {'тупой','куда ты летишь идиот'},
+        {'ну конечно','я просто похлопаю тебе'},
+         {'не ливай'},
+        {'сыну бляди же повезёт'},
+         {'опять чмо ебаное убивает'},
+         {'ну фу','тебе повезло выблядок'},
+         {'ну фу','что ты делаеш'},
+         {'подловила мразь'},
+         {'не','как эьа хуйня убивает','это пиздец'},
+         {'не','этот сочник пикнет'},
+         {'csy','сын шлюхи','тупой'},
+         {'что ты сделал','тупой даун','безмозглый'},
+{',kznm','тупой долбаеб','реально','уебище'},
+{'csy ik.[b','сын бляди ебаной','потеет сидит'},
+{'хуя','норм бектрек'},
+{'пиздец','что с читом'},
+{'красава','лучший просто'},
+{'ну','долбаеб сука','что ты делаешь мразь'},
+ {"найс хуесос", "по iq играешь"},
+{'ты добился результата', 'но это не конец'},
+{"тупой даун", "что ты сделал?"},
+{"пошли 2х2 сын бляди", "дс кидай чмо ебаное"},
+{"пошли 1x1", "дс кидай уебан"},
+ {",kznm", "что ты делаешь тупое"},
+{"CERF", "что ты сделал хуесос"},
+{"блять", "наконец оно меня убило"},
+{"не ожидал что ты такой тупой", "запишу тебя в тетрдаь далбаебов"},
+ {"я не могу в тебя попасть", "сделаешь мне такие же пресетики?", "на regicide.hit"},
+{"ну долбоеб сука", "ЧТО ТЫ ДЕЛАЕШЬ БЛЯДИНА"},
+{"чит же видет", "какой он бездарный и дает шанс этому пидорасу"},
+{"так держать", "сын шлюхенции"},
+{"ну блять", "как оно убивает меня"},
+{"признаю переиграл"},
+{"ну хуесос", "на подпике стоит"},
+{"какой же ты хуевый","НУ Я МИССАЮ ЕМУ В РУКУ А ОН ДУМАЕТ","ЧТО ЭТО ЛЦ"},
+{"сын шлюхи ебаной","я просто не знаю как тебя ещё назвать"},
+{"ну он же реально","подрывает себя","и я не могу попасть"},
+{"опять говно убивает","я просто не могу уже"},
+{"ты че ваще далбаеб?","я твою мать ебал","тупой ублюдок"}
         }}
     }
     math.randomseed(client.unix_time())
@@ -3510,412 +3586,6 @@ do
     drag.on_config_load()
 end
 
-local resolver do
-    resolver = {}
-
--- Улучшенный Resolver с повышенной точностью
-local ULTRA_RESOLVER = {
-    -- Настройки точности
-    TRACE_HITS = true,       -- Анализ трассировки лучей
-    ADAPTIVE_MODE = true,    -- Адаптация к стилю игры
-    DEBUG_VISUALS = true,    -- Визуальная отладка
-    ANTI_BRUTE_INTERVAL = 2.5, -- Интервал сброса Anti-Bruteforce (секунды)
-    AUTO_BAIM_HP = 92        -- Порог HP для авто-байма
-}
-
--- Дополнительные проверки перед запуском
-if not Features or not Features.resolver then return end
-if not Features.resolver.enable.value or not Features.resolver.used.value then return end
-
--- Глобальные структуры данных
-local RESOLVER_DATA = {
-    players = {},
-    last_processed = 0,
-    update_rate = 0.1, -- секунд между обработками
-    last_round_start = 0
-}
-
--- Константы стилей игры
-local PLAYER_STYLES = {
-    NORMAL = 0,
-    DEFENSIVE = 1,
-    ANTI_BRUTE = 2,
-    JITTER = 3
-}
-
--- Константы состояний игрока
-local RESOLVE_STATES = {
-    STANDING = 0,
-    MOVING = 1,
-    CROUCHING = 2,
-    AIRBORNE = 3
-}
-
--- Нормализация угла
-local function normalize_angle(angle)
-    angle = angle % 360
-    if angle > 180 then
-        angle = angle - 360
-    elseif angle < -180 then
-        angle = angle + 360
-    end
-    return angle
-end
-
--- Обнаружение состояния игрока
-local function detect_player_state(ent)
-    local flags = entity.get_prop(ent, "m_fFlags") or 0
-    local vel = {entity.get_prop(ent, "m_vecVelocity")}
-    local speed = math.sqrt(vel[1]^2 + vel[2]^2)
-    local duck = entity.get_prop(ent, "m_flDuckAmount") or 0
-    
-    if bit.band(flags, 1) == 0 then
-        return RESOLVE_STATES.AIRBORNE
-    elseif duck > 0.9 then
-        return RESOLVE_STATES.CROUCHING
-    elseif speed > 5 then
-        return RESOLVE_STATES.MOVING
-    else
-        return RESOLVE_STATES.STANDING
-    end
-end
-
--- Обнаружение стиля игры
-local function detect_play_style(ent)
-    local eye_angles = {entity.get_prop(ent, "m_angEyeAngles")}
-    local lby = entity.get_prop(ent, "m_flLowerBodyYawTarget") or 0
-    local eye_yaw = eye_angles[2] or 0
-    
-    local diff = math.abs(normalize_angle(lby - eye_yaw))
-    
-    if diff > 120 then
-        return PLAYER_STYLES.ANTI_BRUTE
-    elseif diff > 60 then
-        return PLAYER_STYLES.DEFENSIVE
-    else
-        return PLAYER_STYLES.NORMAL
-    end
-end
-
--- Проверка на необходимость байма
-local function should_baim(ent)
-    local health = entity.get_prop(ent, "m_iHealth") or 100
-    return health <= ULTRA_RESOLVER.AUTO_BAIM_HP
-end
-
--- Детектор аномалий (выявляет нестандартное поведение)
-local function detect_anomalies(ent)
-    local vel = {entity.get_prop(ent, "m_vecVelocity")}
-    local speed = math.sqrt(vel[1]^2 + vel[2]^2)
-    local duck = entity.get_prop(ent, "m_flDuckAmount") or 0
-    local flags = entity.get_prop(ent, "m_fFlags")
-    
-    -- Проверка на фейк-движение
-    if speed > 5 and bit.band(flags, 1) == 0 then
-        return "FAKE_MOVE"
-    end
-    
-    -- Проверка на десинхронизированный крауч
-    if duck > 0.6 and speed > 100 then
-        return "FAKE_DUCK"
-    end
-    
-    return "NORMAL"
-end
-
--- Ультра-точный Jitter детектор
-local function ultra_jitter_detect(ent, data)
-    if not data.jitter_history then
-        data.jitter_history = {}
-        for i = 1, 5 do data.jitter_history[i] = 0 end
-    end
-    
-    local current_yaw = entity.get_prop(ent, "m_angEyeAngles[1]") or 0
-    table.insert(data.jitter_history, 1, current_yaw)
-    if #data.jitter_history > 5 then table.remove(data.jitter_history) end
-    
-    -- Анализ изменчивости
-    local variance = 0
-    for i = 2, #data.jitter_history do
-        variance = variance + math.abs(normalize_angle(data.jitter_history[i-1] - data.jitter_history[i]))
-    end
-    
-    -- Определение типа джиттера
-    if variance > 300 then return "EXTREME_JITTER" end
-    if variance > 150 then return "STRONG_JITTER" end
-    if variance > 80 then return "MODERATE_JITTER" end
-    
-    return "NO_JITTER"
-end
-
--- Многоуровневый обработчик Jitter
-local function handle_jitter_ultra(ent, data, jitter_type)
-    local base_angles = {0, 180, 90, -90, 45, -45, 135, -135}
-    local time = globals.curtime()
-    
-    if not data.jitter_state then
-        data.jitter_state = {
-            pattern = {},
-            last_update = time,
-            current_index = 1
-        }
-    end
-    
-    -- Генерация паттерна на основе типа джиттера
-    if #data.jitter_state.pattern == 0 then
-        if jitter_type == "EXTREME_JITTER" then
-            data.jitter_state.pattern = {-60, 60, -30, 30, 0}
-        elseif jitter_type == "STRONG_JITTER" then
-            data.jitter_state.pattern = {-45, 45, -15, 15}
-        else -- MODERATE_JITTER
-            data.jitter_state.pattern = {-30, 30, 0}
-        end
-    end
-    
-    -- Циклическое переключение углов
-    if time - data.jitter_state.last_update > 0.33 then
-        data.jitter_state.current_index = data.jitter_state.current_index % #data.jitter_state.pattern + 1
-        data.jitter_state.last_update = time
-    end
-    
-    return data.jitter_state.pattern[data.jitter_state.current_index]
-end
-
--- Улучшенный Defensive обработчик
-local function handle_defensive_ultra(ent, data)
-    local lby = entity.get_prop(ent, "m_flLowerBodyYawTarget") or 0
-    local eye = entity.get_prop(ent, "m_angEyeAngles[1]") or 0
-    local time = globals.curtime()
-    
-    if not data.defensive_state then
-        data.defensive_state = {
-            last_lby = lby,
-            last_eye = eye,
-            lby_update = time,
-            eye_update = time,
-            offsets = {15, -15, 10, -10, 5, -5},
-            current_offset = 1
-        }
-    end
-    
-    local state = data.defensive_state
-    
-    -- Обнаружение обновления LBY
-    if math.abs(normalize_angle(lby - state.last_lby)) > 5 then
-        state.last_lby = lby
-        state.lby_update = time
-    end
-    
-    -- Обнаружение движения глаз
-    if math.abs(normalize_angle(eye - state.last_eye)) > 10 then
-        state.last_eye = eye
-        state.eye_update = time
-    end
-    
-    -- Смена оффсета каждые 1.1 секунды (частота LBY)
-    if time - state.lby_update > 1.1 then
-        if time - state.eye_update > 0.5 then
-            state.current_offset = state.current_offset % #state.offsets + 1
-            state.eye_update = time
-        end
-        return state.offsets[state.current_offset]
-    end
-    
-    return 0
-end
-
--- Anti-Bruteforce обработчик
-local function handle_anti_brute(ent, data)
-    local time = globals.curtime()
-    
-    if not data.anti_brute_state then
-        data.anti_brute_state = {
-            last_reset = time,
-            sequence = 0,
-            angles = {0, 180, 90, -90, 45, -45, 135, -135}
-        }
-    end
-    
-    local state = data.anti_brute_state
-    
-    -- Сброс каждые 2.5 секунды или новый раунд
-    if time - state.last_reset > ULTRA_RESOLVER.ANTI_BRUTE_INTERVAL or 
-       time - RESOLVER_DATA.last_round_start < 1.0 then
-        state.sequence = 0
-        state.last_reset = time
-    end
-    
-    -- Циклическое переключение углов
-    state.sequence = state.sequence % #state.angles + 1
-    return state.angles[state.sequence]
-end
-
--- Функция предсказания следующего LBY
-local function predict_next_lby(ent, data)
-    if not data.lby_history then
-        data.lby_history = {}
-    end
-    
-    local current_lby = entity.get_prop(ent, "m_flLowerBodyYawTarget") or 0
-    table.insert(data.lby_history, current_lby)
-    if #data.lby_history > 8 then table.remove(data.lby_history, 1) end
-    
-    if #data.lby_history >= 3 then
-        -- Простое предсказание на основе среднего
-        local sum = 0
-        for i = #data.lby_history - 2, #data.lby_history do
-            sum = sum + data.lby_history[i]
-        end
-        return normalize_angle(sum / 3)
-    end
-    
-    return current_lby
-end
-
--- Основная функция ресолвера
-function ULTRA_RESOLVER.process_player(ent)
-    if not entity.is_alive(ent) then return end
-    
-    local data = RESOLVER_DATA.players[ent] or {}
-    local eye_yaw = entity.get_prop(ent, "m_angEyeAngles[1]") or 0
-    local eye_pitch = entity.get_prop(ent, "m_angEyeAngles[0]") or 0
-    local lby = entity.get_prop(ent, "m_flLowerBodyYawTarget") or 0
-    local predicted_lby = predict_next_lby(ent, data)
-    local state = detect_player_state(ent)
-    local anomaly = detect_anomalies(ent)
-    local jitter_type = ultra_jitter_detect(ent, data)
-    local baim_active = should_baim(ent)
-    
-    -- Определение стиля игры
-    local resolver_mode = "DEFAULT"
-    local correction = 0
-    
-    if baim_active then
-        resolver_mode = "BAIM_ACTIVE"
-        correction = 180 -- Форсируем байм
-    elseif anomaly ~= "NORMAL" then
-        resolver_mode = "ANOMALY_"..anomaly
-        correction = math.random(-35, 35)
-    elseif jitter_type ~= "NO_JITTER" then
-        resolver_mode = jitter_type
-        correction = handle_jitter_ultra(ent, data, jitter_type)
-    else
-        local style = detect_play_style(ent)
-        if style == PLAYER_STYLES.DEFENSIVE then
-            resolver_mode = "DEFENSIVE"
-            correction = handle_defensive_ultra(ent, data)
-        elseif style == PLAYER_STYLES.ANTI_BRUTE then
-            resolver_mode = "ANTI_BRUTE"
-            correction = handle_anti_brute(ent, data)
-        end
-    end
-    
-    -- Учет состояния игрока
-    local state_factor = 1.0
-    if state == RESOLVE_STATES.MOVING then
-        state_factor = 0.7
-    elseif state == RESOLVE_STATES.CROUCHING then
-        state_factor = 0.5
-    elseif state == RESOLVE_STATES.AIRBORNE then
-        state_factor = 0.9
-    end
-    
-    -- Расчет финального угла
-    local resolved_yaw = normalize_angle(predicted_lby + correction * state_factor)
-    local resolved_pitch = eye_pitch
-    
-    -- Особые случаи для pitch
-    if resolver_mode:find("JITTER") then
-        resolved_pitch = math.random() > 0.5 and 89 or -89
-    elseif resolver_mode == "DEFENSIVE" then
-        resolved_pitch = clamp(resolved_pitch, -45, 45)
-    end
-    
-    -- Принудительный байм при низком HP
-    if baim_active then
-        resolved_pitch = 89 -- Направляем в тело
-    end
-    
-    -- Применение углов
-    entity.set_prop(ent, "m_angEyeAngles[0]", resolved_pitch)
-    entity.set_prop(ent, "m_angEyeAngles[1]", resolved_yaw)
-    
-    -- Сохранение данных
-    data.last_resolved = {yaw = resolved_yaw, pitch = resolved_pitch, mode = resolver_mode}
-    RESOLVER_DATA.players[ent] = data
-end
-
--- Обработчик событий
-client.set_event_callback("net_update_end", function()
-    if globals.curtime() - RESOLVER_DATA.last_processed < RESOLVER_DATA.update_rate then
-        return
-    end
-    
-    RESOLVER_DATA.last_processed = globals.curtime()
-    
-    local players = entity.get_players(true)
-    for _, player in ipairs(players) do
-        ULTRA_RESOLVER.process_player(player)
-    end
-end)
-
--- Сброс при начале раунда
-client.set_event_callback("round_start", function()
-    RESOLVER_DATA.last_round_start = globals.curtime()
-    
-    -- Сброс всех состояний Anti-Bruteforce
-    for ent, data in pairs(RESOLVER_DATA.players) do
-        if data.anti_brute_state then
-            data.anti_brute_state.last_reset = globals.curtime()
-            data.anti_brute_state.sequence = 0
-        end
-    end
-end)
-
--- Трассировка попаданий
-client.set_event_callback("player_hurt", function(e)
-    if not ULTRA_RESOLVER.TRACE_HITS then return end
-    
-    local victim = client.userid_to_entindex(e.userid)
-    local attacker = client.userid_to_entindex(e.attacker)
-    
-    if attacker == entity.get_local_player() and victim ~= entity.get_local_player() then
-        local data = RESOLVER_DATA.players[victim] or {}
-        data.hits = (data.hits or 0) + 1
-        data.last_hit_time = globals.curtime()
-        
-        -- Запоминаем успешный угол
-        if data.last_resolved then
-            data.last_good_angle = data.last_resolved.yaw
-        end
-        
-        RESOLVER_DATA.players[victim] = data
-    end
-end)
-
--- Визуализация информации о ресольвере через консоль (если render.text не работает)
-client.set_event_callback("paint", function()
-    if not ULTRA_RESOLVER.DEBUG_VISUALS then return end
-    
-    local local_player = entity.get_local_player()
-    if not local_player or not entity.is_alive(local_player) then return end
-    
-    local players = entity.get_players(true)
-    for _, player in ipairs(players) do
-        local data = RESOLVER_DATA.players[player]
-        if data and data.last_resolved then
-            local name = entity.get_player_name(player)
-            local health = entity.get_prop(player, "m_iHealth") or 100
-            local baim_status = should_baim(player) and "| BAIMING" or ""
-            
-            -- Вывод информации в консоль
-            client.log(string.format("[Resolver] %s (%d HP) - Mode: %s %s - Yaw: %.1f",
-                name, health, data.last_resolved.mode, baim_status, data.last_resolved.yaw))
-        end
-    end
-end)
-end
-
 local mantletap do
     mantletap = {}
 
@@ -4028,5 +3698,4 @@ predict = function()
     end
 end
 end
-
 

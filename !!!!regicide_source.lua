@@ -1014,8 +1014,8 @@ local menu do
 local Predict = {} do
     Predict = create.element(tabs.aa, "Predict")
 
-    Predict.enable = tabs.aa:checkbox("⛧ Predict System ⛧")
-    Predict.hotexp = tabs.aa:hotkey("⛧Hotkey⛧")
+    Predict.enable = tabs.aa:checkbox("Predict System")
+    Predict.hotexp = tabs.aa:hotkey("Hotkey")
     Predict.pingpos = tabs.aa:combobox("Ping Variations", { "High", "Low" })
 
     Predict.selectgun = tabs.aa:combobox("\n", { "-", "AWP", "SCOUT", "AUTO", "R8" })
@@ -2142,7 +2142,7 @@ local ragelogs do
             col = (utils.to_hex(col)):sub(1,6)
             pui.macros.col = '\a'..col
             utils.printc(pui.format(
-                "\f<r>[\f<col>-\f<r>] ~ Miss "..
+                "\f<r>[\f<col>+\f<r>] ~ Miss "..
                 "\f<col>"..entity.get_player_name(e.target).."\f<r>'s "..
                 "\f<col>"..(hitgroups[e.hitgroup] or "?")..
                 "\f<r> due to \f<col>"..e.reason.."\f<r>"..
@@ -2775,8 +2775,6 @@ local trashtalk do
 {"нихуя се ты сочный....", "прям как алина:3"},
 {"undetected since 2020 ☆"},
 {"♘ ☇ 𝚜𝚌𝚘𝚘𝚝 𝚡 𝚔𝚡𝚘𝚗𝚡 𝚏𝚝 𝚛𝚘𝚐𝚒𝚌𝚒𝚍𝚎.𝚕𝚞𝚊 (◣◢) ✟"},
-{"чмоня detected", "solution: dsc.gg/regicidelua"},
-{"char pad_01[3] ¤*'~``~'* ft.【ＶＡＬＤＳＯＬＵＴＩＯＮＳ】"},
 {"ⓁⒶⒸⒽⒷⓄⓂⒷ"},
 {"KS OMK 3NDY OMK W A5TK TM9 ZBI"},
 {"𝐦_𝐟𝐥𝐊𝐚𝐲𝐫𝐨𝐧𝐖𝐞𝐢𝐠𝐡𝐭 = 𝐈𝐍𝐓_𝐌𝐀𝐗"},
@@ -2789,11 +2787,8 @@ local trashtalk do
 {"пацаны не извиняются", "особенно перед пидорасом"},
 {"норм играешь", "сын шлюхи"},
 {"1", "мб regicide купишь?"},
-{"loading cfg by kxanx 77% #pizdavam"},
-{"OWNED BY LEGENDICK SQUAD ХУЕСОС"},
 {"уебан ебаный", "куда ты выбежал?"},
 {"это было настолько случайно, что даже твои родители не так удивились, когда ты родился"},
-{"впенен бич via regicide.lua"},
 {"ебанный бич", "почему ты сдох? оправдайся"},
 {"луасенс не бустит - 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖 поможет сын шалавы"},
 {"ты че мразота ? вздумал тягатся с 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖 юзером?"},
@@ -2807,7 +2802,6 @@ local trashtalk do
 {"Только умные люди играют с 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖"},
 {"почему я опять тя убил пидораса? У меня куплен 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖"},
 {"Чё опять не попал да? купи 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖 терпила"},
-{"братан, у меня 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖 с гм аа, соси хуй"},
 {"am i him? yeah, i use regicide"},
 {"stop slaving and buy regicide"},
 {"you need regicide stupid kids"},
@@ -2821,30 +2815,23 @@ local trashtalk do
 {"whatever you do, regicide.lua do it better ^^"},
 {"куда пикаем?"},
 {"e1"},
+{"приятные тапы 2025"},
+{"скит или геймсенс"},
+{"убийца королей регицайд"},
+{"zｚＺ", "playing with regicide is so boooring"},
+{"i love regicide", "do you love it?"},
+{"im cursed", "satan watching us"},
 {"#финан$овыйтрэп"},
 {"1"},
 {"финансовый трэп"},
 {"l2p bot"},
 {'جدا الحمد لله أبي'},
-{"ʀᴀᴢ ᴀᴅᴅᴇᴅ ᴛʜɪs ᴛᴏ ʀᴇɢɪᴄɪᴅᴇ sᴏᴜʀᴄᴇ ᴀɴᴅ ɪᴛ ᴍᴀᴅᴇ ɪᴛ sᴏ ᴍᴜᴄʜ ʙᴇᴛᴛᴇʀ"  },
-{"ȶʏ ʄօʀ ʍ2 ƈօʍքɨӼɨօռ աɨȶɦ ȶɦɛ քօքֆ ǟռɖ ȶɦɛ ɮǟռɢֆ ʄȶ 𝔯𝔢𝔤𝔦𝔠𝔡𝔢 𝔩𝔬𝔞"},
-{"百萬富翁買鬼 ツ"},
-{"skeet invite code in morse: ... .-- ..-. -.-- -... .-- ..-. -... .--- --.. -... .-.. -.- .... ..-. .-.. -.- --. .. .-. .--. --. .-.. --.- --.- - -.-- .---- -..- . .-- -.- -.-- --.- ---.. .-.. .... ... ...- --.. -..- -.. .--. -..- -- -... - -.--"},
-{'𝟜𝟝.𝟙𝟛𝟞.𝟚𝟘𝟝.𝟙𝟠𝟛:𝟙𝟛𝟛𝟟/𝕡𝕝𝕒𝕪𝕖𝕣𝕤.𝕛𝕤𝕠𝕟 𝓬𝓽𝓻𝓵+f "𝖎𝖘𝖘𝖔 𝖋𝖔𝖎 𝖉𝖔𝖕𝖊, 𝖌𝖆𝖓𝖉𝖆 𝖙𝖔𝖖𝖚𝖊'},
-{"🕯️⧚🎃⧚🔮 ƙąYRཞơŋ ῳıƖƖ ƈơơ℘ ʂ℘ıɛƖɛŋ 🔮⧚🎃⧚🕯️"},
-{"yesterday i got smoked by (っ◔◡◔)っ ιвιzα 6ℓ 1.9 т∂ι 160 ¢υρяα 2004 160 нρ / 118 кω 1896 ¢м3 (115.7 ¢υ-ιи)"},
 {"yt bot"},
-{"sleep"},
 {"видно ты без regicide.lua сидишь, пора бы обновляться сосик)"},
-{"сразу видно кфг исуе мб кфг у кханокса купиш?"},
 {"видно натренированный ротик", "без regicide.lua сидишь?"},
-{"фу сидишь без regicide.lua в 2к25?"},
 {"в следуйщий раз заходи с 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖.𝕙𝕚𝕥 чтобы не позорится"},
-{"t1"},
-{'1'},
 {"1", "теперь думай кто это написал)))"},
 {"𝐫𝐞𝐠𝐢𝐜𝐢𝐝𝐞.𝐡𝐢𝐭。 技术多功能LUA脚本"},
-{"ʙʏ ʙᴜʏɪɴɢ ʀᴇɢɪᴄɪᴅᴇ.ʜɪᴛ, ʏᴏᴜ'ʀᴇ ʙᴜʏɪɴɢ ᴀ ᴛɪᴄᴋᴇᴛ ᴛᴏ ʜᴇʟʟ."},  
 {"The Flame will never die, for I am REGICIDE"},
 {"☾ 𝕘𝕖𝕥 **𝕖𝕕 𝕓𝕪 𝕕𝕖𝕧𝕚𝕝 #𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖.𝕙𝕚𝕥 ~ 𝕟𝕖𝕥𝕨𝕠𝕣k ☾"},
 {"твоя сила – лишь иллюзия перед властью regicide.hit."},
@@ -2868,19 +2855,14 @@ local trashtalk do
 {"family-friendly lua -> dsc.gg/regicidelua"},
 {"The Flame will never die, for I am REGICIDE.HIT"},
 {"если бы IQ был оружием", "ты бы ходил с палкой"},
-{"𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚.𝙝𝙞𝙩 𝙥𝙧𝙚𝙢𝙞𝙪𝙢 𝙥𝙧𝙚𝙙𝙞𝙘𝙩𝙞𝙤𝙣 𝙩𝙚𝙘𝙝𝙣𝙤𝙡𝙤𝙜𝙞𝙚𝙨 ◣_◢"},
 {"снова палю в экран", "снова вижу этот дискорд dsc.gg/regicidelua"},
 {"мы летим низко ", "в башке храню все dsc.gg/regicidelua"},
 {"1", "теперь думай кто это написал)))"},
-{"REGICIDE SEASON ON TRƱE #BLIXXEN AND #EVIL RADIO vibe 2025™"},
 {"winning not possibility, sry #regicide"},
 {"ХА-ХА-ХА ! ака. НИЧЕ! (финансовый трэп)  DATA404"},
 {"★★★ 𝔾𝕖𝕋 𝔾𝕠𝕠𝔻 ★★★"},
 {"♛ 𝟓𝟎𝟎$ 𝐋𝐔𝐀 𝐉𝐈𝐓𝐓𝐄𝐑 𝐅𝐈𝐗? 𝐋𝐈𝐍𝐊 𝐈𝐍 𝐃𝐄𝐒𝐑𝐈𝐏𝐓𝐈𝐎𝐍"},
 {"𝙒𝘼𝙉𝙉𝘼 𝘽𝙀 𝙇𝙄𝙆𝙀 𝙈𝙀? 𝙂𝙀𝙏 @𝙍𝙀𝙂𝙄𝘾𝙄𝘿𝙀.𝙃𝙄𝙏"},
-{"твоя смерть так же горяча как алина(◣_◢)"},
-{"щас после бухла реабилитируюсь"},
-{"твоя мама любит писюньчики легендиков"},
 {"♛ @𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚.𝙝𝙞𝙩 ♛"},
 {'𝕀𝕊 𝕄𝕐 𝕃𝕌𝔸 𝔹𝔸𝔻? 𝕌 𝕁𝕌𝕊𝕋 ℍ𝔸𝕍𝔼ℕ𝕋 𝕄𝕆ℕ𝔼𝕐'},
 {"☆꧁✬◦°˚°◦. ɛʐ .◦°˚°◦✬꧂☆"},
@@ -2890,33 +2872,16 @@ local trashtalk do
 {"♠️ 𝐆𝐎𝐃 𝐁𝐋𝐄𝐒𝐒 𝙍𝙀𝙂𝙄𝘾𝙄𝘿𝙀.𝙃𝙄𝙏 ♠"},
 {"𝙩𝙧𝙮 𝙝𝙞𝙩 𝙢𝙮 𝙢𝙚𝙩𝙖 𝙖𝙣𝙩𝙞𝙖𝙞𝙢𝙨"},
 {"♛𝐦𝐁𝐎𝐏𝐦𝐦𝟎𝟓𝐑𝐔𝐒♛"},
-{"ｏｕｔｌａｗ？ ｎｏ ｒｅｇｉｃｉｄｅ"},
 {"𝙉𝙄𝘾𝙀 𝙍𝙀𝙎𝙊𝙇𝙑𝙀𝙍 𝙃𝘼𝙃𝘼𝙃𝘼"},
 {"☆꧁✬◦°˚°◦. ɮʏ ɮɛֆȶ ʟʊǟ .◦°˚°◦✬꧂☆"},
 {"♠️ 𝙋𝙔𝘾𝘾𝙆𝙐𝙀 𝘽𝙊𝙋𝙗𝙡 ♠"},
-{"𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖.𝕙𝕚𝕥 ḋöṁïṅäẗëṡ ḧṿḧ ṡċëṅë"},
-{"𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚.𝙝𝙞𝙩 𝙥𝙧𝙚𝙢𝙞𝙪𝙢 𝙥𝙧𝙚𝙙𝙞𝙘𝙩𝙞𝙤𝙣 𝙩𝙚𝙘𝙝𝙣𝙤𝙡𝙤𝙜𝙞𝙚𝙨 ◣◢"},
 {"✵•.¸,✵°✵.｡.✰ 𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚 ✰.｡.✵°✵,¸.•✵"},
-{"я нᴇ могʏ бᴇз тᴇбя жить... 𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚♛"},
-{"с ᴋᴀждыᴍ фpaгᴏм я ближᴇ к 𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚♛"},
-{"♛ 𝙍𝙀𝙂𝙄𝘾𝙄𝘿𝙀 𝐈𝐓𝐒 𝐆𝐑𝐄𝐀𝐓𝐄𝐒𝐓 𝐋𝐔𝐀 ♛"},
-{"REBELLION DONT PREDICT THIS | REGICIDE"},
-{'V Ы E B A N B Y regicide.hit'},
 {"𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚.𝙝𝙞𝙩 𝙥𝙧𝙚𝙢𝙞𝙪𝙢 𝙥𝙧𝙚𝙙𝙞𝙘𝙩𝙞𝙤𝙣 𝙩𝙚𝙘𝙝𝙣𝙤𝙡𝙤𝙜𝙞𝙚𝙨 ◣◢"},
-{" $$$ 1 TAP UFF YA  $$$ ∩ ( ͡⚆ ͜ʖ ͡⚆) ∩"},
-{'.::НоВоСиБиРсК::.'},
 {"♥𝙍𝙀𝙂𝙄𝘾𝙄𝘿𝙀 𝘼𝙉𝙏𝙄-𝘼𝙄𝙈𝘽𝙊𝙏 𝘼𝙉𝙂𝙇𝙀𝙎♥"},
 {"LX IXL D4RK IXL V K1NG DMN XUL"},
 {"₲_₲"},
 {"✧･ﾟ: ✧･ﾟ: 𝗥𝗘𝗚𝗜𝗖𝗜𝗗𝗘.𝗟𝗨𝗔 :･ﾟ✧:･ﾟ✧"},
-{"▞▚▟▙ 𝚛𝚎𝚐𝚒𝚌𝚒𝚍𝚎.𝚑𝚒𝚝 ▜▙▚▞"},
 {"『𝚁』『𝙴』『𝙶』『𝙸』『𝙲』『𝙸』『𝙳』『𝙴』『.』『𝙻』『𝚄』『𝙰』"},
-{"ⓈⒸⓄⓄⓉⓋⒾⓇⓊⓈⓋⒺⓇⓈⒾⓄⓃ 𝟚𝟘𝟚𝟝"},
-{"𝚜𝚢𝚜𝚝𝚎𝚖_𝚘𝚟𝚎𝚛𝚛𝚒𝚍𝚎: 𝚛𝚎𝚐𝚒𝚌𝚒𝚍𝚎_𝚖𝚘𝚍𝚎"},
-{"♛𝓡𝓮𝓰𝓲𝓬𝓲𝓭𝓮.𝓵𝓾𝓪 𝓸𝓾𝓽𝓼𝓱𝓲𝓷𝓮 𝓮𝓷𝓮𝓶𝔂𝓲𝓼♛"},
-{"☾ 𝕘𝕖𝕥 𝕗𝕦𝕔𝕜𝕖𝕕 𝕓𝕪 #𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖.𝕝𝕦𝕒 𝕣𝕖𝕤𝕠𝕝𝕧𝕖𝕣 ☾"},
-{"≽^• ˕ • ྀི≼ ᴋᴀᴋ ᴛы уʍᴇᴩ? ᴀ ᴛочно я жᴇ ᴄ 𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚.𝙝𝙞𝙩"},
-{"★ знᴀᴇɯь, ᴋоᴦдᴀ ʙидиɯь чᴇᴧоʙᴇᴋᴀ бᴇз 𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚 ʍᴇня ᴛоɯниᴛ"},
 {"dont even try to kill me next time"},
 {"whatever you do, regicide.lua do it better ^^"},
 {"zero chance to kill regicide.lua user **"},
@@ -2924,27 +2889,19 @@ local trashtalk do
 {"i break rules ft. regicide.hit"},
 {"𝕟𝕠 𝕤𝕜𝕚𝕝𝕝 𝕟𝕖𝕖𝕕 𝕛𝕦𝕤𝕥 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖"},
 {"Estk came to my door last night and said regicide best ◣◢ I say ok king 👑"},
-{"∩ ( ⚆ ʖ ⚆) ∩ ДоПрыГался(ت)ДрУжоЧеК"},
-{"·٠●•۩۞۩ОтДыХаЙ (ٿ) НуБяРа۩۞۩•●٠·"},
 {"󠃐whatever you do, regicide.lua do it better ^^"},
-{"ᴧюди ᴛᴏжᴇ ᴄᴛᴩᴀдᴀюᴛ, ᴏᴛᴛᴏᴦᴏ, чᴛᴏ у них нᴇᴛ 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖.𝕙𝕚𝕥"},
-{"бᴇднᴏʍу нужᴇн ʍиᴧᴧиᴏн, бᴏᴦᴀᴛᴏʍу нужᴇн 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖.𝕙𝕚𝕥"},
 {"𝟙𝕟𝕖𝕕 𝕒𝕘𝕒𝕚𝕟 𝓫𝔂 𝓻𝓮𝓰𝓲𝓬𝓲𝓭𝓮.𝓱𝓲𝓽"},
 {"| 𝑾𝒆𝒍𝒄𝒐𝒎𝒆 𝒕𝒐 𝒓𝒆𝒈𝒊𝒄𝒊𝒅𝒆.𝒉𝒊𝒕 |"},
-{"𝙞 𝙙𝙤𝙢𝙞𝙣𝙖𝙩𝙚 𝙩𝙝𝙚 𝙜𝙖𝙢𝙚 𝙬𝙞𝙩𝙝 𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚.𝙡𝙪𝙖"},
 {"your death sponsored by @regicide.hit"},
 {"𝙗𝙚𝙣𝙪𝙩𝙯𝙚 𝙙𝙖𝙨 𝙪𝙧𝙨𝙥𝙧ü𝙣𝙜𝙡𝙞𝙘𝙝𝙚 𝙨𝙠𝙧𝙞𝙥𝙩"},
-{"☆꧁✬◦°˚°◦. ɮʏ ɮɛֆȵ ʟʊǟ .◦°˚°◦✬꧂☆"},
 {"если бы IQ был оружием", "ты бы ходил с палкой"},
-{"моя сила regicide", "что брикаю лцшечку"},
 {"снова палю в экран", "снова вижу этот дискорд", "dsc.gg/regicidelua"},
 {"мы летим низко ", "в башке храню все dsc.gg/regicidelua"},
 {"1", "теперь думай кто это написал)))"},
-{"REGICIDE SEASON ON TRƱE #BLIXXEN AND #EVIL RADIO vibe 2025™"},
+{"REGICIDE SEASON ON TRƱE #BLIXXEN AND #BLÄSTFÄMILY vibe 2025™"},
 {"rockstar life style #regicide"},
 {"winning not possibility, sry #regicide"},
 {"лови тапыча хуесос"},
-{"е1"},
 {"𝑹𝒆𝒈𝒊𝒄𝒊𝒅𝒆 [𝒈𝒐𝒅𝒎𝒐𝒅𝒆] 𝒆𝒏𝒂𝒃𝒍𝒆𝒅"},
 {"𝗶 𝘂𝘀𝗲 𝑹𝒆𝒈𝒊𝒄𝒊𝒅𝒆 𝘄𝘁𝗳"},
 {"не будь терпилой и переходи на темную сторону *REGICIDE.LUA VS ALL NN'S DOGS"},
@@ -2952,31 +2909,21 @@ local trashtalk do
 {"ｏｕｔｌａｗ？ ｎｏ 𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚"},
 {"get rekt no sweat, you’re dropped by 𝑹𝒆𝒈𝒊𝒄𝒊𝒅𝒆 scum"},
 {"ебанный хуесос, который раз ты лежишь в ногах юзера 𝑹𝒆𝒈𝒊𝒄𝒊𝒅𝒆?"},
-{"1"},
-{"ё1"},
 {"t1"},
 {"1", "сиди ", "грызи дальше семечки", "хуйня грязная"},
 {"я призываю свою BlÏxxêñ gang все с regicide.lua были"},
 {'1 мразота'},
-{'хааххаха','опять умер'},
-{'1','оправдайся','почему ты опять умер'},
 {"1",'отлетаешь','сын бляди'},
-{"1",'куда бежиш червяк'},
 {"1",'опять забайтился мусор'},
 {'HAHAHAHAHHAHA','1 ДЕРЕВО ЕБАННОЕ'},
 {"1",'и это игрок?'},
-{"1",'игрок?'},
 {"1",'улетаешь со своего ванвея','хуесос'},
 {"1",'лови в пиздак мразота'},
-{'1','?','чурбек ебаный куда летим'},
 {"1",'поймал в шляпу?'},
 {'депортирован в ад к матери шлюхе'},
-{'1','ахаха','спать шлюшка'},
 {'сука не позорься и ливни лол'},
 {'пикнул?','сиди и наблюдай теперь чмо'},
 {'1','пора ливать','чмошница'},
-{"1",'куда ты пикаешь то','скряга ебаная'},
-{'парашыч ебанный'},
 {"дно маркета пробито... (rebillion)"},
 {"⚠️ Wallet Connected"},
 {"☆*: .｡. o(≧▽≦)o .｡.:*☆"},
@@ -2996,37 +2943,26 @@ local trashtalk do
 {"(ｏ ‵-′)ノ”(ノ﹏<。)"},
 {"REGICIDE'LUA LIFESTYLE"},
 {"𝓇𝑒𝒷𝑒𝓁𝓁𝒾𝑜𝓃,𝓁𝓊𝒶𝓈𝑒𝓃𝓈𝑒,𝒽𝓎𝓈𝓉𝑒𝓇𝒾𝒶 𝒱𝒮 𝑅𝐸𝒢𝐼𝒞𝐼𝒟𝐸 (𝑒𝓏 𝓌𝒾𝓃)"},
-{"☆꧁✬◦°˚°◦. ɮʏ ɮɛֆȶ ʟʊǟ .◦°˚°◦✬꧂☆"},
 {"𝙔𝙤𝙪𝙧 𝙙𝙚𝙖𝙩𝙝 𝙬𝙖𝙨 𝙨𝙥𝙤𝙣𝙨𝙤𝙧𝙞𝙧𝙚𝙙 𝙗𝙮 @𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚"},
 {"𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚 𝙬𝙞𝙡𝙡 𝙖𝙡𝙬𝙖𝙮𝙨 𝙗𝙚 𝙖𝙝𝙚𝙖𝙙"},
 {"𝙨𝙘𝙧𝙞𝙥𝙩 𝙙𝙚 𝙖𝙡𝙩𝙖 𝙘𝙖𝙡𝙞𝙙𝙖𝙙 * 𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚 *"},
-{"𝐇𝐞𝐲, 𝐢 𝐛𝐢𝐝 𝟓𝟎𝟎𝟎$ 𝐨𝐧 𝐲𝐨𝐮𝐫 𝐧𝐮𝐦𝐛𝐞𝐫 𝟖𝟖𝟖"},
 {"𝐔 𝐭𝐞𝐛𝐲𝐚 𝐳𝐚𝐥𝐞𝐭!"},
-{"𝕙𝕒𝕤𝕤𝕖 𝕖𝕤 𝕠𝕕𝕖𝕣 𝕝𝕚𝕖𝕓𝕖 𝕖𝕤."},
-{"𝟒𝟐𝟗𝟓𝟑𝟎𝟓𝟔𝟗𝟓𝟑𝟔𝟑𝟐𝟗𝟒 𝐋𝐨𝐜𝐚𝐭𝐢𝐨𝐧: 𝐀𝐮𝐬𝐭𝐫𝐚𝐥𝐢𝐚"},
 {"₳₦₲ɆⱠł₵ ₴₵Ɽł₱₮ ₣ØⱤ ₮ⱧɆ ₮ⱤɄɆ ฿ⱤØ₮ⱧɆⱤⱧØØĐ"},
 {"₮ⱧɆ ₥ØØ₦Ⱡł₲Ⱨ₮ ₴₵ⱤɆ₳₥"},
 {"𝙀𝙕 𝙈𝘼𝙋𝘼【１６－０】"},
 {"₦_₦"},
-{"𝚕𝚞𝚊𝟻.𝟹: 𝚛𝚎𝚐𝚒𝚌𝚒𝚍𝚎_𝚟𝟸(𝚏𝚊𝚝𝚊𝚕=𝚝𝚛𝚞𝚎)"},
-{'𝐯𝐞𝐧𝐢 𝐯𝐢𝐝𝐢 𝐯𝐢𝐜𝐢'},
-{'𝕤𝕔𝕙𝕝𝕒𝕗 𝕧𝕖𝕣𝕕𝕒𝕞𝕞𝕥𝕖𝕤 𝕒𝕣𝕤𝕔𝕙𝕝𝕠𝕔𝕙'},
-{"𝔸ℕ𝕋𝕀-ℙℍ𝕆𝕋𝕆𝔾ℝ𝔸ℙℍ 𝕄𝕆𝔻𝔼 𝔼ℕ𝔸𝔹𝕃𝔼𝔻"},
 {'ｗｈａｔ ａｒｅ ｕ ｄｏｉｎｇ ｄｏｇ'},
-{"𝐉𝐥𝐨𝐫 𝐁𝟔𝐮𝐁𝐚𝐞𝐓 @𝐌𝐮𝐫𝐢𝐧𝐨𝐓"},
 {"ｓｋｅｅｔ ｄｏｎｔ ｎｅｅｄ ｕｐｄａｔｅ (◣_◢)"},
 {"𝙈𝙚𝙩𝙖𝙬𝙖𝙮𝙞𝙣𝙜 𝙧𝙣... 𝙘𝙖𝙣𝙩 𝙧𝙚𝙥𝙡𝙮"},
 {'𝙜_𝙂 𝘽𝙤𝙏'},
 {"We are pleased to inform you that your item has been successfully purchased!"},
 {"𝐎𝐰𝐍𝐞𝐃𝐛𝐲𝐂𝐞𝐏𝐞𝐫𝐀𝐊𝐚𝐏𝐚𝐂𝐛𝟏𝟗𝟗𝟔"},
-{'𝕨𝕙𝕪 𝕪𝕠𝕦 𝕤𝕠 𝕓𝕒𝕕? 𝕘𝕠 𝕡𝕝𝕒𝕪 𝕃𝕖𝔾𝕚𝕋'},
-{"𝐘𝐨𝐮 𝐧𝐞𝐞𝐝 𝐭𝐨 𝐩𝐚𝐬𝐬 𝐚𝐧 𝐀𝐌𝐋 𝐜𝐡𝐞𝐜𝐤"},
 {'понадеялся на удачу?'},
 {'зря ты так летишь','у тебя ноль шансов убить меня'},
 {'1','как на этот раз оправдаешься?'},
 {'1','забайтилось тупое'},
 {'норм луа у тебя братуха'},
-{'1','DEAD',"ахахах"},
+{"моя сила regicide", "что не брикаю лцшечку"},
 {'1','hs bot'},
 {'1','спать чюрка'},
 {'1','грязная хуйня'},
@@ -4116,5 +4052,1033 @@ end
 
     if features.Jumpstop:get() and features.Jumpstop.hotkey:get() then
         renderer.indicator(230, 230, 230, 230, 'AS')
-
     end
+
+local automatic_peek = {} do
+    local ref21 = {} do
+        ref21.automatic_scope = pui.reference('RAGE', 'Aimbot', 'Automatic scope')
+        ref21.target_hitbox = pui.reference('RAGE', 'Aimbot', 'Target hitbox')
+        ref21.quickpeek = pui.reference('RAGE', 'Other', 'Quick peek assist')
+        ref21.onshot_antiaim = pui.reference('AA', 'Other', 'On shot anti-aim')
+        ref21.doubletap, ref21.doubletap_mode = pui.reference('RAGE', 'Aimbot', 'Double tap')
+        ref21.doubletap_fakelag_limit = pui.reference('RAGE', 'Aimbot', 'Double tap fake lag limit')
+        ref21.min_damage = pui.reference('RAGE', 'Aimbot', 'Minimum damage')
+        ref21.min_damage_override, ref21.min_damage_override_value = pui.reference('RAGE', 'Aimbot', 'Minimum damage override')
+        ref21.automatic_scope = pui.reference('RAGE', 'Aimbot', 'Automatic scope')
+        ref21.quickpeek = pui.reference('RAGE', 'Other', 'Quick peek assist')
+        ref21.quickpeek_mode = pui.reference('RAGE', 'Other', 'Quick peek assist mode')
+        ref21.quickpeek_distance = pui.reference('RAGE', 'Other', 'Quick peek assist distance')
+        ref21.force_baim = pui.reference('RAGE', 'Aimbot', 'Force body aim')
+        ref21.third_person_alive = pui.reference('VISUALS', 'Effects', 'Force third person (alive)')
+    end
+    local smoothy = {
+        to_pairs = {
+            vector = {'x', 'y', 'z'},
+            imcolor =  {'r', 'g', 'b', 'a'}
+        },
+    
+        get_type = function(self, value)
+            local val_type = type(value)
+    
+            if val_type == 'cdata' and value.x and value.y and value.z then
+                return 'vector'
+            elseif val_type == 'cdata' and value.r and value.g and value.b and value.a then
+                return 'imcolor'
+            elseif val_type == 'userdata' and value.__type then
+                return string.lower(value.__type.name)
+            end
+    
+            return val_type
+        end,
+    
+        copy_tables = function(self, destination, keysTable, valuesTable)
+            valuesTable = valuesTable or keysTable
+            local mt = getmetatable(keysTable)
+    
+            if mt and getmetatable(destination) == nil then
+                setmetatable(destination, mt)
+            end
+    
+            for k, v in pairs(keysTable) do
+                if type(v) == 'table' then
+                    destination[k] = self:copy_tables({}, v, valuesTable[k])
+                else
+                    local value = valuesTable[k]
+    
+                    if type(value) == 'boolean' then
+                        value = value and 1 or 0
+                    end
+    
+                    destination[k] = value
+                end
+            end
+    
+            return destination
+        end,
+    
+        resolve = function(self, easing_fn, previous, new, clock, duration)
+            if type(new) == 'boolean' then new = new and 1 or 0 end
+            if type(previous) == 'boolean' then previous = previous and 1 or 0 end
+    
+            local previous = easing_fn(clock, previous, new - previous, duration)
+    
+            if type(new) == 'number' then
+                if math.abs(new - previous) <= .001 then
+                    previous = new
+                end
+    
+                if previous % 1 < .0001 then
+                    previous = math.floor(previous)
+                elseif previous % 1 > .9999 then
+                    previous = math.ceil(previous)
+                end
+            end
+    
+            return previous
+        end,
+    
+        perform_easing = function(self, ntype, easing_fn, previous, new, clock, duration)
+            if self.to_pairs[ntype] then
+                for _, key in ipairs(self.to_pairs[ntype]) do
+                    previous[key] = self:perform_easing(
+                        type(v), easing_fn,
+                        previous[key], new[key],
+                        clock, duration
+                    )
+                end
+    
+                return previous
+            end
+    
+            if ntype == 'table' then
+                for k, v in pairs(new) do
+                    previous[k] = previous[k] or v
+                    previous[k] = self:perform_easing(
+                        type(v), easing_fn,
+                        previous[k], v,
+                        clock, duration
+                    )
+                end
+    
+                return previous
+            end
+    
+            return self:resolve(easing_fn, previous, new, clock, duration)
+        end,
+    
+        new = function(this, default, easing_fn)
+            if type(default) == 'boolean' then
+                default = default and 1 or 0
+            end
+    
+            local mt = { }
+            local mt_data = {
+                value = default or 0,
+                easing = easing_fn or function(t, b, c, d)
+                    return c * t / d + b
+                end
+            }
+    
+            function mt.update(self, duration, value, easing)
+                if type(value) == 'boolean' then
+                    value = value and 1 or 0
+                end
+    
+                local clock = globals.frametime()
+                local duration = duration or .15
+                local value_type = this:get_type(value)
+                local target_type = this:get_type(self.value)
+    
+                assert(value_type == target_type, string.format('type mismatch. expected %s (received %s)', target_type, value_type))
+    
+                if self.value == value then
+                    return value
+                end
+    
+                if clock <= 0 or clock >= duration then
+                    if target_type == 'imcolor' or target_type == 'vector' then
+                        self.value = value:clone()
+                    elseif target_type == 'table' then
+                        this:copy_tables(self.value, value)
+                    else
+                        self.value = value
+                    end
+                else
+                    local easing = easing or self.easing
+    
+                    self.value = this:perform_easing(
+                        target_type, easing,
+                        self.value, value,
+                        clock, duration
+                    )
+                end
+    
+                return self.value
+            end
+    
+            return setmetatable(mt, {
+                __metatable = false,
+                __call = mt.update,
+                __index = mt_data
+            })
+        end,
+    
+        new_interp = function(this, initial_value)
+            return setmetatable({
+                previous = initial_value or 0
+            }, {
+                __call = function(self, new_value, mul)
+                    local mul = mul or 1
+                    local tickinterval = globals.tickinterval() * mul
+                    local difference = math.abs(new_value - self.previous)
+    
+                    if difference > 0 then
+                        local time = math.min(tickinterval, globals.frametime()) / tickinterval
+                        self.previous = self.previous + time * (new_value - self.previous)
+                    else
+                        self.previous = new_value
+                    end
+    
+                    self.previous = (self.previous % 1 < .0001) and 0 or self.previous
+    
+                    return self.previous
+                end
+            })
+        end
+    }
+    local common = {} do
+        common.extend_vector = function(pos, length, angle)
+            local rad = angle * math.pi / 180
+            return vector(pos.x + (math.cos(rad) * length), pos.y + (math.sin(rad) * length), pos.z)
+        end
+    
+        local sv_gravity = cvar.sv_gravity
+        local sv_jump_impulse = cvar.sv_jump_impulse
+    
+        common.extrapolate_position = function(ent, origin, ticks, inverted)
+            local tickinterval = globals.tickinterval()
+    
+            local sv_gravity = sv_gravity:get_float() * tickinterval
+            local sv_jump_impulse = sv_jump_impulse:get_float() * tickinterval
+    
+            local p_origin, prev_origin = origin, origin
+    
+            local velocity = vector(entity.get_prop(ent, 'm_vecVelocity'))
+            local gravity = velocity.z > 0 and -sv_gravity or sv_jump_impulse
+    
+            for i = 1, ticks do
+                prev_origin = p_origin
+                p_origin = vector(
+                    p_origin.x + (inverted and -(velocity.x * tickinterval) or (velocity.x * tickinterval)),
+                    p_origin.y + (inverted and -(velocity.y * tickinterval) or (velocity.y * tickinterval)),
+                    p_origin.z + (inverted and -((velocity.z + gravity) * tickinterval) or (velocity.z + gravity) * tickinterval)
+                )
+    
+                local fraction = client.trace_line(-1,
+                    prev_origin.x, prev_origin.y, prev_origin.x,
+                    p_origin.x, p_origin.y, p_origin.x
+                )
+    
+                if fraction <= .99 then
+                    return prev_origin
+                end
+            end
+    
+            return p_origin
+        end
+    
+        common.set_movement = function(cmd, destination, local_player)
+            local move_yaw = vector(vector(entity.get_origin(local_player)):to(destination):angles()).y
+    
+            cmd.in_forward = 1
+            cmd.in_back = 0
+            cmd.in_moveleft = 0
+            cmd.in_moveright = 0
+            cmd.in_speed = 0
+            cmd.forwardmove = 800
+            cmd.sidemove = 0
+            cmd.move_yaw = move_yaw
+        end
+    
+        common.rgb_to_hex = function(clr)
+            return string.format('%02x%02x%02x%02x', clr[1], clr[2], clr[3], clr[4])
+        end
+    
+        common.lerp = function(a, b, percentage)
+            if a == b then
+                return b
+            end
+    
+            return a + (b - a) * percentage
+        end
+    
+        common.color_swap = function(color1, color2, weight)
+            weight = math.clamp(weight, 0, 1)
+    
+            if weight == 0 then
+                return color1
+            elseif weight == 1 then
+                return color2
+            end
+    
+            return {
+                common.lerp(color1[1], color2[1], weight),
+                common.lerp(color1[2], color2[2], weight),
+                common.lerp(color1[3], color2[3], weight),
+                common.lerp(color1[4], color2[4], weight)
+            }
+        end
+    
+        common.colored_text = function(text, clr)
+            return string.format('\a%02x%02x%02x%02x%s', clr[1], clr[2], clr[3], clr[4], text)
+        end
+    
+        common.gradient_text = function(text, color1, color2, fraction, gradient)
+            color2 = color2 or color1
+            fraction = math.clamp(fraction, 0, 1)
+    
+            if fraction == 0 then
+                return common.colored_text(text, color2)
+            elseif fraction == 1 then
+                return common.colored_text(text, color1)
+            end
+    
+            local text_length = string.len(text)
+    
+            local return_text = {}
+    
+            for i = 1, text_length do
+                local weight = gradient and ((1 - fraction) - (text_length - i) / (text_length - 1)) + (1 - fraction) or i - fraction * text_length
+                local color = common.color_swap(color1, color2, weight)
+    
+                return_text[i] = common.colored_text(string.sub(text, i, i), color)
+            end
+    
+            return table.concat(return_text)
+        end
+    end
+    local exploit = {} do
+        exploit.active = false
+        exploit.charged = false
+        exploit.disabled = false
+    
+        local doubletap = {} do
+            doubletap.active = false
+            doubletap.charged = false
+            doubletap.disabled = false
+            doubletap.forced_discharge = false
+    
+            function doubletap:reset()
+                self.active = false
+                self.charged = false
+                self.disabled = false
+                self.forced_discharge = false
+            end
+    
+            function doubletap:restore()
+                ref21.doubletap:override()
+            end
+    
+            function doubletap:disable()
+                ref21.doubletap:override(false)
+                self.disabled = true
+            end
+    
+            ---@param cmd struct pass it to call it in the same tick
+            function doubletap:force_discharge(cmd)
+                if cmd and cmd.discharge_pending ~= nil then
+                    cmd.discharge_pending = true
+                end
+    
+                self.forced_discharge = true
+            end
+    
+            local restore = false
+    
+            function doubletap:on_setup_command(cmd)
+                if self.disabled then
+                    self:reset()
+                    restore = true
+                    return
+                end
+    
+                if restore then
+                    restore = false
+                    self:restore()
+                end
+    
+                if self.forced_discharge then
+                    self.forced_discharge = false
+                    cmd.discharge_pending = true
+                end
+    
+                if not ref.doubletap:get()
+                or not ref.doubletap:get_hotkey() then
+                    self:reset()
+                    return
+                end
+    
+                self.active = true
+                self.charged = exploit.charged
+            end
+        end
+    
+        local hideshots = {} do
+            hideshots.active = false
+            hideshots.charged = false
+            hideshots.disabled = false
+    
+            function hideshots:reset()
+                self.active = false
+                self.charged = false
+                self.disabled = false
+            end
+    
+            function hideshots:restore()
+                ref21.onshot_antiaim:override()
+                ref21.onshot_antiaim.hotkey:override()
+            end
+    
+            function hideshots:disable()
+                ref21.onshot_antiaim:override(false)
+                self.disabled = true
+            end
+    
+            local restore = false
+    
+            function hideshots:on_setup_command()
+                if self.disabled then
+                    self:reset()
+                    restore = true
+                    return
+                end
+    
+                if restore then
+                    restore = false
+                    self:restore()
+                end
+    
+                if not ref21.onshot_antiaim.value
+                or not ref21.onshot_antiaim:get_hotkey() then
+                    self:reset()
+                    return
+                end
+    
+                self.active = true
+                self.charged = exploit.charged
+            end
+        end
+    
+        local defensive = {} do
+            defensive.active = false
+            defensive.active_until = 0
+            defensive.ticks = 0
+            defensive.ticks_from_activation = 0
+            defensive.disabled = false
+            defensive.forced = false
+    
+            function defensive:reset()
+                self.active = false
+                self.active_until = 0
+                self.ticks = 0
+                self.ticks_from_activation = 0
+                self.disabled = false
+                self.forced = false
+            end
+    
+            function defensive:disable()
+                self.disabled = true
+            end
+    
+            ---@param cmd struct pass it to call it in the same tick
+            function defensive:force(cmd)
+                if cmd and cmd.force_defensive ~= nil then
+                    cmd.force_defensive = true
+                end
+    
+                self.forced = true
+            end
+    
+            local prev_sim_time = 0
+    
+            function defensive:detect()
+                local local_player = vars.local_player
+                local tickcount = globals.tickcount()
+    
+                local sim_time = toticks(entity.get_prop(local_player, 'm_flSimulationTime'))
+                local sim_diff = sim_time - prev_sim_time
+    
+                if sim_diff < 0 then
+                    self.active_until = tickcount + math.abs(sim_diff) - toticks(client.real_latency()) - 1
+                    -- self.active_until = tickcount + math.abs(sim_diff)
+                    self.ticks = self.active_until - tickcount
+                end
+    
+                prev_sim_time = sim_time
+    
+                self.active = self.active_until > tickcount
+    
+                if self.active then
+                    self.ticks_from_activation = self.ticks - (self.active_until - tickcount) + 1
+                end
+            end
+    
+            local hittable_time = 0
+            local last_hittable_time = 0
+    
+            function defensive:handle(cmd)
+    
+            end
+    
+            function defensive:on_setup_command(cmd)
+                if not exploit.charged then
+                    self:reset()
+                    return
+                end
+    
+                if self.disabled then
+                    self.disabled = false
+                end
+    
+                if self.forced then
+                    self.forced = false
+                    cmd.force_defensive = true
+                end
+    
+                -- self:handle(cmd)
+                self:detect()
+            end
+        end
+    
+        function exploit:reset()
+            self.active = false
+            self.charged = false
+            self.disabled = false
+    
+            doubletap:reset()
+            hideshots:reset()
+            defensive:reset()
+        end
+    
+        function exploit:restore()
+            ref21.doubletap:override()
+            ref21.onshot_antiaim:override()
+        end
+    
+        function exploit:disable()
+            ref21.doubletap:override(false)
+            ref21.onshot_antiaim:override(false)
+            self.disabled = true
+        end
+    
+        function exploit:detect()
+            local m_nTickBase = entity.get_prop(vars.local_player, 'm_nTickBase')
+            local shift = math.floor(m_nTickBase - globals.tickcount() - 3 - toticks(client.latency()) * .4)
+            local wanted = -15 + (ref.doubletap_fakelag_limit.value - 1) + 5 --error margin
+    
+            self.charged = shift <= wanted
+        end
+    
+        local restore = false
+    
+        function exploit:on_setup_command(cmd)
+            if self.disabled then
+                self:reset()
+                restore = true
+                return
+            end
+    
+            if restore then
+                restore = false
+                self:restore()
+            end
+    
+            self:detect()
+    
+            doubletap:on_setup_command(cmd)
+            hideshots:on_setup_command()
+            defensive:on_setup_command(cmd)
+    
+            self.active = doubletap.active or hideshots.active
+    
+            -- print('\nexploit = ', inspect(exploit))
+        end
+    
+        exploit.doubletap = doubletap
+        exploit.hideshots = hideshots
+        exploit.defensive = defensive
+    end
+    local hitgroups_to_hitboxes = {
+        ['Head'] = {0},
+        ['Chest'] = {4, 5, 6},
+        ['Stomach'] = {2, 3},
+        ['Arms'] = {13, 14, 15, 16, 17, 18},
+        ['Legs'] = {7, 8, 9, 10},
+        ['Feet'] = {11, 12}
+    }
+
+    local allowed_hitboxes = {0, 5, 2, 15, 17, 9, 10}
+    local active_hitboxes = {}
+
+    local amount = 4
+    local step_distance = 22
+
+    local targeting = false
+    local returning = false
+    local should_return = false
+    local teleport = false
+    local disable_exploit = false
+
+    local cache = {
+        positions = {},
+        middle_pos = vector(),
+        last_returning_time = 0,
+        active_point_index = 0,
+        current_target = nil
+    }
+
+    local hotkeys = {
+        main = false,
+        force_baim = false
+    }
+
+    local visual = {
+        values = {
+            global_alpha = smoothy:new(),
+            pos = {},
+            alpha = {}
+        },
+        active = false
+    }
+
+    function update_hitboxes(reference, force_baim)
+        local new_hitboxes = {}
+        local target_hitboxes = reference.value
+
+        local force_baim_disabled_hitgroups = {'Head', 'Arms', 'Legs', 'Feet'}
+
+        for i = 1, #target_hitboxes do
+            if force_baim and table.contains(force_baim_disabled_hitgroups, target_hitboxes[i]) then
+                goto continue
+            end
+
+            local hitgroup = hitgroups_to_hitboxes[target_hitboxes[i]]
+
+            for j = 1, #hitgroup do
+                local hitbox = hitgroup[j]
+
+                if table.contains(allowed_hitboxes, hitbox) then
+                    table.insert(new_hitboxes, hitbox)
+                end
+            end
+
+            ::continue::
+        end
+
+        active_hitboxes = new_hitboxes
+    end
+
+    ref21.target_hitbox:set_callback(update_hitboxes, true)
+
+    function skip_func(entindex, contents_mask)
+        if entity.get_classname(entindex) == 'CCSPlayer' and entity.is_enemy(entindex) then
+            return false
+        end
+
+        return true
+    end
+
+    function handle_point(position, prev_position, angle, step_distance, index, view_offset, vec_mins, vec_maxs, max_step)
+        local start_pos = prev_position and (prev_position - view_offset) or position
+        local pos = common.extend_vector(start_pos, index == 0 and 0 or step_distance, angle)
+
+        local trace_up = trace_lib.hull(
+            start_pos, start_pos + vector(0, 0, max_step), vec_mins, vec_maxs, {skip = skip_func, mask = 0x201400B}
+        ).end_pos
+
+        local trace_horizontal = trace_lib.hull(
+            vector(start_pos.x, start_pos.y, trace_up.z),
+            vector(pos.x, pos.y, trace_up.z),
+            vec_mins, vec_maxs, {skip = skip_func, mask = 0x201400B}
+        ).end_pos
+
+        if pos:dist2d(trace_horizontal) >= step_distance * .97 then
+            return false
+        end
+
+        local trace_down = trace_lib.hull(
+            trace_horizontal,
+            vector(trace_horizontal.x, trace_horizontal.y, position.z - 240),
+            vec_mins, vec_maxs, {skip = skip_func, mask = 0x201400B}
+        ).end_pos
+
+        return trace_down + view_offset
+    end
+
+    local max_step = 18
+
+    function setup_points(local_player, position, angle, amount, step_distance)
+        local view_offset = vector(entity.get_prop(local_player, 'm_vecViewOffset'))
+        local vec_mins = vector(entity.get_prop(local_player, 'm_vecMins'))
+        local vec_maxs = vector(entity.get_prop(local_player, 'm_vecMaxs'))
+
+        cache.positions[0] = handle_point(
+            position, nil, 0,
+            step_distance, 0, view_offset,
+            vec_mins, vec_maxs, max_step
+        )
+
+        for i = 1, amount do
+            local angle = i % 2 == 0 and angle - 90 or angle + 90
+
+            local prev_point = cache.positions[i <= 2 and 0 or i - 2]
+
+            if not prev_point then
+                goto continue
+            end
+
+            local point = handle_point(
+                position, prev_point, angle,
+                step_distance, i, view_offset,
+                vec_mins, vec_maxs, max_step
+            )
+
+            if not point or (prev_point and math.abs(prev_point.z - point.z) > max_step) then
+                for k = i, amount, 2 do
+                    cache.positions[k] = false
+                end
+
+                goto continue
+            end
+
+            cache.positions[i] = point
+
+            ::continue::
+        end
+
+        return cache.positions
+    end
+
+    function weapon_can_fire(player, weapon)
+        local lp_NextAttack = entity.get_prop(player, 'm_flNextAttack')
+        local wpn_NextPrimaryAttack = entity.get_prop(weapon, 'm_flNextPrimaryAttack')
+
+        if math.max(0, lp_NextAttack or 0, wpn_NextPrimaryAttack or 0) > globals.curtime() or entity.get_prop(weapon, 'm_iClip1') <= 0 then
+            return false
+        end
+
+        return true
+    end
+
+    local scope_weapons = {
+        'CWeaponSSG08',
+        'CWeaponAWP',
+        'CWeaponG3SG1',
+        'CWeaponSCAR20'
+    }
+
+    function can_target(local_player, target)
+        if not target then
+            return false
+        end
+
+        local lp_wpn = entity.get_player_weapon(local_player)
+
+        if not weapon_can_fire(local_player, lp_wpn) then
+            return false
+        end
+
+        if not ref21.automatic_scope.value
+        and table.contains(scope_weapons, entity.get_classname(lp_wpn))
+        and entity.get_prop(local_player, 'm_bIsScoped') ~= 1 then
+            return false
+        end
+
+        if exploit.active and not exploit.charged then
+            return false
+        end
+
+        if entity.get_prop(local_player, 'm_flVelocityModifier') ~= 1 then
+            return false
+        end
+
+        local esp_data = entity.get_esp_data(target) or {alpha = 0}
+
+        if esp_data.alpha < .75 then
+            return false
+        end
+
+        return true
+    end
+
+    function trace_enemy(positions, local_player, target, hitboxes)
+        local target_health = entity.get_prop(target, 'm_iHealth')
+        local minimum_damage = ref21.min_damage_override.value and ref21.min_damage_override:get_hotkey()
+        and ref21.min_damage_override_value.value or ref21.min_damage.value
+
+        for i = 1, #positions do
+            local pos = positions[i]
+
+            if not pos then
+                goto continue
+            end
+
+            for j = 1, #hitboxes do
+                local hitbox = hitboxes[j]
+                local hitbox_pos = vector(entity.hitbox_position(target, hitbox))
+
+                local entindex, damage = client.trace_bullet(
+                    local_player,
+                    pos.x, pos.y, pos.z,
+                    hitbox_pos.x, hitbox_pos.y, hitbox_pos.z,
+                    hitbox == 0 --bad fix
+                )
+
+                --bad fix
+                if hitbox == 0 then
+                    damage = damage * 4
+                end
+
+                if damage >= math.min(minimum_damage, target_health) and damage > 0 then
+                    return pos, i
+                end
+            end
+
+            ::continue::
+        end
+
+        return nil, 0
+    end
+    ref21.quickpeek.hotkey:set('Toggle')
+    function handle(cmd)
+        local main_key = lua_menu.ragebotfeatures.aipeek:get() and lua_menu.ragebotfeatures.aipeek_hotkey:get()
+
+        if main_key and not hotkeys.main then
+            local local_player = entity.get_local_player()
+            local lp_origin = vector(entity.get_origin(local_player))
+            cache.middle_pos = common.extrapolate_position(local_player, lp_origin, 13, true)
+            hotkeys.main = true
+        elseif not main_key and hotkeys.main then
+            ref21.quickpeek:override()
+            ref21.quickpeek.hotkey:override()
+            ref21.quickpeek_mode:override()
+            ref21.doubletap:override()
+            ref21.onshot_antiaim:override()
+            hotkeys.main = false
+        end
+
+        local force_baim = ref21.force_baim:get()
+
+        if force_baim and not hotkeys.force_baim then
+            update_hitboxes(ref21.target_hitbox, true)
+            hotkeys.force_baim = true
+        elseif not force_baim and hotkeys.force_baim then
+            update_hitboxes(ref21.target_hitbox)
+            hotkeys.force_baim = false
+        end
+
+        if not main_key then
+            targeting = false
+            returning = false
+            should_return = false
+            teleport = false
+            disable_exploit = false
+            visual.active = false
+            return
+        end
+
+        ref21.quickpeek:override(true)
+        ref21.quickpeek.hotkey:override({'Always on'})
+
+        local move_mode = lua_menu.ragebotfeatures.label:get()
+
+        local local_player = entity.get_local_player()
+        local lp_velocity = vector(entity.get_prop(local_player, 'm_vecVelocity')):length2d()
+        local tickcount = globals.tickcount()
+
+        local local_override = bit.band(entity.get_prop(local_player, 'm_fFlags'), 1) ~= 1
+        or (cmd.in_forward == 1 or cmd.in_moveleft == 1 or cmd.in_moveright == 1 or cmd.in_back == 1 or cmd.in_jump == 1)
+
+        local lp_origin = vector(entity.get_origin(local_player))
+        local middle_pos = cache.middle_pos
+        local dist_to_middle = middle_pos:dist2d(lp_origin)
+
+        if (move_mode == 'Offensive' and not targeting and not returning)
+        or (dist_to_middle > .15 and lp_velocity < 1.011 and lp_velocity ~= 0) then
+            cache.middle_pos = lp_origin
+        end
+
+        local target = client.current_threat()
+        cache.current_target = target
+
+        local target_origin = target and vector(entity.get_origin(target)) or vector()
+        local angle = target and vector(middle_pos:to(target_origin):angles()).y or vector(client.camera_angles()).y
+
+        local positions = setup_points(local_player, middle_pos, angle, amount, step_distance)
+
+        visual.active = true
+
+        local active_point_pos, active_point_index = nil, 0
+
+        if not local_override and not returning and can_target(local_player, target) then
+            active_point_pos, active_point_index = trace_enemy(
+                positions, local_player, target, active_hitboxes
+            )
+        end
+
+        targeting = active_point_pos ~= nil
+        cache.active_point_index = active_point_index
+
+        if targeting then
+            common.set_movement(cmd, active_point_pos, local_player)
+            returning = false
+            should_return = true
+            teleport = false
+            disable_exploit = false
+        elseif local_override then
+            returning = false
+            should_return = false
+            teleport = false
+            disable_exploit = false
+        elseif should_return or move_mode == 'Defensive' then
+            returning = true
+            should_return = false
+            teleport = true
+        end
+
+        if not returning then
+            cache.last_returning_time = tickcount
+        end
+
+        if returning then
+            if dist_to_middle < .15 then
+                returning = false
+                teleport = false
+                disable_exploit = false
+            elseif teleport then
+                if ref21.doubletap:get_hotkey()
+                and weapon_can_fire(local_player, entity.get_player_weapon(local_player)) then
+                    if tickcount - cache.last_returning_time == 1 then
+                        cmd.force_defensive = true
+                    elseif tickcount - cache.last_returning_time >= 7 then
+                        ref21.doubletap:override(false)
+                        ref21.onshot_antiaim:override(false)
+                        teleport = false
+                        disable_exploit = true
+                    end
+                elseif not ref21.doubletap:get_hotkey() and ref21.onshot_antiaim:get_hotkey() then
+                    if not exploit.defensive.active then
+                        ref.onshot_antiaim:override(false)
+                        teleport = false
+                        disable_exploit = true
+                    end
+                end
+            end
+        end
+
+        ref21.quickpeek_mode:override(returning and {'Retreat on shot', 'Retreat on key release'} or nil)
+
+        if disable_exploit then
+            ref21.doubletap:override(false)
+            ref21.onshot_antiaim:override(false)
+        else
+            ref21.doubletap:override()
+            ref21.onshot_antiaim:override()
+        end
+    end
+
+    function render()
+        local local_player = entity.get_local_player()
+
+        if not entity.is_alive(local_player) or not (ref21.third_person_alive.value and ref21.third_person_alive:get_hotkey()) then
+            return
+        end
+
+        local data = cache.positions
+        local color_ref = {255, 255, 255, 255}
+        local active = visual.active
+        local values = visual.values
+        local active_point = cache.active_point_index
+
+        local g_alpha = values.global_alpha(.045, active)
+
+        if g_alpha <= 0 then
+            return
+        end
+
+        for i = 0, #data do
+            local pos = data[i]
+
+            if pos == nil then
+                goto continue
+            end
+
+            if not values.alpha[i] then
+                values.alpha[i] = smoothy:new()
+            end
+
+            if not values.pos[i] then
+                values.pos[i] = smoothy:new(vector())
+            end
+
+            local alpha = values.alpha[i](.045, pos and active)
+
+            if alpha <= 0 then
+                goto continue
+            end
+
+            if pos then
+                values.pos[i](
+                    alpha > .15 and .02 or 0,
+                    vector(pos.x, pos.y, pos.z - 26 + 5 * alpha + (active_point == i and 2 or 0))
+                )
+            end
+
+            local pos_screen = vector(renderer.world_to_screen(values.pos[i].value:unpack()))
+
+            if pos_screen.x ~= 0 then
+                local clr = active_point == i and color_ref or {255, 255, 255, 100}
+                renderer.circle(pos_screen.x, pos_screen.y, clr[1], clr[2], clr[3], clr[4] * alpha, 3, 0, 1)
+            end
+
+            local prev_index = i <= 2 and 0 or i - 2
+            local line_from = vector(renderer.world_to_screen(values.pos[prev_index].value:unpack()))
+            local line_to = vector(renderer.world_to_screen(values.pos[i].value:unpack()))
+
+            if line_from.x ~= 0 and line_to.x ~= 0 then
+                renderer.line(line_from.x, line_from.y, line_to.x, line_to.y, 255, 255, 255, 100 * alpha)
+            end
+
+            ::continue::
+        end
+    end
+
+    function automatic_peek:on_setup_command(cmd)
+        handle(cmd)
+    end
+
+    function automatic_peek:on_paint()
+        if lua_menu.ragebotfeatures.aipeek_render:get() then
+            render()
+        end
+    end
+end
+
+
+
+client.set_event_callback("setup_command", function(cmd)
+    if Features.ai_peek and Features.ai_peek.enable:get() and automatic_peek and automatic_peek.on_setup_command then
+        automatic_peek:on_setup_command(cmd, {
+            hotkey   = Features.ai_peek.key:get(),
+            mode     = Features.ai_peek.mode:get(),
+            distance = Features.ai_peek.distance:get()
+        })
+    end
+end)
+
+client.set_event_callback("paint", function()
+    if Features.ai_peek and Features.ai_peek.enable:get() and automatic_peek and automatic_peek.on_paint then
+        automatic_peek:on_paint(Features.ai_peek.render:get())
+    end
+end)
+

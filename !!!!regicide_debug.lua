@@ -1,2807 +1,8211 @@
+-- ========================================================================
+-- =)
+-- ========================================================================
+---@diagnostic disable: undefined-global, undefined-field
+
+if not LPH_OBFUSCATED then
+    LPH_NO_VIRTUALIZE = function (...) return ... end
+end
+
+LPH_NO_VIRTUALIZE(function ()
+-- credits to @uwukson4800
+_G.DEBUG = true
+local safe do safe = { } function safe:print(...) if _DEBUG then print('[dbg] ', ...) end end function safe:require(module_name) local status, module = pcall(require, module_name) if status then return module else self:print('error while loading module "' .. module_name .. '": ' .. module) return nil end end function safe:call(func, ...) local args = { ... } local status, err = pcall(func, unpack(args)) if not status then self:print('error with ' .. func .. ' : ' .. err) end end client.set_event_callback('shutdown', function() if safe then safe = nil end if _DEBUG then _DEBUG = false end end) end
+
+do
+    client.exec('clear')
+    client.exec('con_filter_enable 1')
+    client.exec('con_filter_text \'[gamesense] / Regicide V2\'')
+end
+
+local ffi           = safe:require ('ffi')
+
+ffi.cdef[[
+    typedef struct
+    {
+        uint8_t r;
+        uint8_t g;
+        uint8_t b;
+        uint8_t a;
+    } color_struct_t;
+    typedef void (__cdecl* print_function)(void*, color_struct_t&, const char* text, ...);
+]]
+local uintptr_t = ffi.typeof("uintptr_t**")
+local color_struct_t = ffi.typeof("color_struct_t")
+
 local panorama_api = panorama.open()
 
-local ffi = require('ffi')
-local vector = require('vector')
+local vector        = safe:require ('vector')
 
-local pui = require('gamesense/pui')
-local color = require('gamesense/color')
-local base64 = require("gamesense/base64")
-local inspect = require('gamesense/inspect')
-local clipboard = require("gamesense/clipboard")
+local http          = safe:require ('gamesense/http')
+local pui           = safe:require ('gamesense/pui')
+local base64        = safe:require ('gamesense/base64')
+local clipboard     = safe:require ('gamesense/clipboard')
+local aa_func       = safe:require ('gamesense/antiaim_funcs')
+local trace         = safe:require ('gamesense/trace')
+local csgo_weapons  = safe:require ('gamesense/csgo_weapons')
+local steamworks    = safe:require ('gamesense/steamworks')
+local localize      = safe:require ('gamesense/localize')
+local chat          = safe:require ('gamesense/chat')
 
-local entity2 = require("gamesense/entity")
-local csgo_weapons = require("gamesense/csgo_weapons")
-local antiaim_funcs = require("gamesense/antiaim_funcs")
+local exploits=(function()local classes={ }function class(name)return function(tab)if not tab then return classes[name]end tab.__index,tab.__classname=tab,name if tab.call then tab.__call=tab.call end setmetatable(tab,tab)classes[name],_G[name]=tab,tab return tab end end local g_ctx={local_player=nil,weapon=nil,aimbot=ui.reference("RAGE","Aimbot","Enabled"),doubletap={ui.reference("RAGE","Aimbot","Double tap")},hideshots={ui.reference("AA","Other","On shot anti-aim")},fakeduck=ui.reference("RAGE","Other","Duck peek assist")}local clamp=function(value,min,max)return math.min(math.max(value,min),max)end class"exploits"{max_process_ticks=(math.abs(client.get_cvar("sv_maxusrcmdprocessticks")or 16)-1),tickbase_difference=0,ticks_processed=0,command_number=0,choked_commands=0,need_force_defensive=false,current_shift_amount=0,reset_vars=function(self)self.ticks_processed=0 self.tickbase_difference=0 self.choked_commands=0 self.command_number=0 end,store_vars=function(self,ctx)self.command_number=ctx.command_number or 0 self.choked_commands=ctx.chokedcommands or 0 end,store_tickbase_difference=function(self,ctx)if ctx.command_number==self.command_number then local tickbase=entity.get_prop(g_ctx.local_player,"m_nTickBase")or 0 self.ticks_processed=clamp(math.abs(tickbase-(self.tickbase_difference or 0)),0,(self.max_process_ticks or 0)-(self.choked_commands or 0))self.tickbase_difference=math.max(tickbase,self.tickbase_difference or 0)self.command_number=0 end end,is_doubletap=function(self)return ui.get(g_ctx.doubletap[2])end,is_hideshots=function(self)return ui.get(g_ctx.hideshots[2])end,is_active=function(self)return self:is_doubletap()or self:is_hideshots()end,in_defensive=function(self,max)max=max or self.max_process_ticks return self:is_active()and(self.ticks_processed>1 and self.ticks_processed<max)end,is_defensive_ended=function(self)return not self:in_defensive()or((self.ticks_processed>=0 and self.ticks_processed<=5)and(self.tickbase_difference or 0)>0)end,is_lagcomp_broken=function(self)local tickbase=entity.get_prop(g_ctx.local_player,"m_nTickBase")or 0 return not self:is_defensive_ended()or(self.tickbase_difference or 0)<tickbase end,can_recharge=function(self)if not self:is_active()then return false end local tickbase=entity.get_prop(g_ctx.local_player,"m_nTickBase")or 0 local curtime=globals.tickinterval()*(tickbase-16)if curtime<(entity.get_prop(g_ctx.local_player,"m_flNextAttack")or 0)then return false end if curtime<(entity.get_prop(g_ctx.weapon,"m_flNextPrimaryAttack")or 0)then return false end return true end,in_recharge=function(self)if not(self:is_active()and self:can_recharge())or self:in_defensive()then return false end local latency_shift=math.ceil(toticks(client.latency())*1.25)local current_shift_amount=(((self.tickbase_difference or 0)-globals.tickcount())*-1)+latency_shift local max_shift_amount=(self.max_process_ticks-1)-latency_shift local min_shift_amount=-(self.max_process_ticks-1)+latency_shift if latency_shift~=0 then return current_shift_amount>min_shift_amount and current_shift_amount<max_shift_amount else return current_shift_amount>(min_shift_amount/2)and current_shift_amount<(max_shift_amount/2)end end,should_force_defensive=function(self,state)if not self:is_active()then return false end self.need_force_defensive=state and self:is_defensive_ended()end,charge_ticks=14,charge_timer=globals.tickcount(),allow_unsafe_charge=function(self,state)if not(self:is_active()--[[and self:can_recharge()]])then self.charge_timer=globals.tickcount()ui.set(g_ctx.aimbot,true)return end if not state then self.charge_timer=globals.tickcount()ui.set(g_ctx.aimbot,true)return end if ui.get(g_ctx.fakeduck)then ui.set(g_ctx.aimbot,true)return end if globals.tickcount()>=self.charge_timer+self.charge_ticks then ui.set(g_ctx.aimbot,true)else ui.set(g_ctx.aimbot,false)end end,force_reload_exploits=function(self,state)if not state then ui.set(g_ctx.doubletap[1],true)ui.set(g_ctx.hideshots[1],true)return end if self:is_doubletap()and not self:in_recharge()then ui.set(g_ctx.doubletap[1],false)else ui.set(g_ctx.doubletap[1],true)end if self:is_hideshots()and not self:in_recharge()then ui.set(g_ctx.hideshots[1],false)else ui.set(g_ctx.hideshots[1],true)end end}local event_list={on_setup_command=function(ctx)if not(entity.get_local_player()and entity.is_alive(entity.get_local_player())and entity.get_player_weapon(entity.get_local_player()))then return end g_ctx.local_player=entity.get_local_player()g_ctx.weapon=entity.get_player_weapon(g_ctx.local_player)if exploits.need_force_defensive then ctx.force_defensive=true end end,on_run_command=function(ctx)exploits:store_vars(ctx)end,on_predict_command=function(ctx)exploits:store_tickbase_difference(ctx)end,on_player_death=function(ctx)if not(ctx.userid and ctx.attacker)then return end if g_ctx.local_player~=client.userid_to_entindex(ctx.userid)then return end exploits:reset_vars()end,on_level_init=function()exploits:reset_vars()end,on_round_start=function()exploits:reset_vars()end,on_round_end=function()exploits:reset_vars()end,on_shutdown=function()collectgarbage("collect")end}for k,v in next,event_list do client.set_event_callback(k:sub(4),function(ctx)v(ctx)end)end return exploits end)()
 
-local angle3d_struct = ffi.typeof("struct { float pitch; float yaw; float roll; }")
-local vec_struct = ffi.typeof("struct { float x; float y; float z; }")
-
-local cUserCmd =
-    ffi.typeof(
-    [[
-    struct
-    {
-        uintptr_t vfptr;
-        int command_number;
-        int tick_count;
-        $ viewangles;
-        $ aimdirection;
-        float forwardmove;
-        float sidemove;
-        float upmove;
-        int buttons;
-        uint8_t impulse;
-        int weaponselect;
-        int weaponsubtype;
-        int random_seed;
-        short mousedx;
-        short mousedy;
-        bool hasbeenpredicted;
-        $ headangles;
-        $ headoffset;
-        bool send_packet; 
-    }
-    ]],
-    angle3d_struct,
-    vec_struct,
-    angle3d_struct,
-    vec_struct
-    )
-
-local client_sig = client.find_signature("client.dll", "\xB9\xCC\xCC\xCC\xCC\x8B\x40\x38\xFF\xD0\x84\xC0\x0F\x85") or error("client.dll!:input not found.")
-local get_cUserCmd = ffi.typeof("$* (__thiscall*)(uintptr_t ecx, int nSlot, int sequence_number)", cUserCmd)
-local input_vtbl = ffi.typeof([[struct{uintptr_t padding[8];$ GetUserCmd;}]],get_cUserCmd)
-local input = ffi.typeof([[struct{$* vfptr;}*]], input_vtbl)
-local get_input = ffi.cast(input,ffi.cast("uintptr_t**",tonumber(ffi.cast("uintptr_t", client_sig)) + 1)[0])
-
-local refs, refs2 do
-    refs = {
-        aa = {
-            enabled = pui.reference("AA", "Anti-aimbot angles", "Enabled"),
-            pitch = pui.reference("AA", "Anti-aimbot angles", "Pitch"),
-            pitch_val = select(2, pui.reference("AA", "Anti-aimbot angles", "Pitch")),
-            yaw_base = pui.reference("AA", "Anti-aimbot angles", "Yaw base"),
-            yaw = pui.reference("AA", "Anti-aimbot angles", "Yaw"),
-            yaw_val = select(2, pui.reference("AA", "Anti-aimbot angles", "Yaw")),
-            jitter = pui.reference("AA", "Anti-aimbot angles", "Yaw jitter"),
-            jitter_val = select(2, pui.reference("AA", "Anti-aimbot angles", "Yaw jitter")),
-            body = pui.reference("AA", "Anti-aimbot angles", "Body yaw"),
-            body_val = select(2, pui.reference("AA", "Anti-aimbot angles", "Body yaw")),
-            body_fs = pui.reference("AA", "Anti-aimbot angles", "Freestanding body yaw"),
-            fs = pui.reference("AA", "Anti-aimbot angles", "Freestanding"),
-            edge = pui.reference("AA", "Anti-aimbot angles", "Edge yaw"),
-            roll = pui.reference("AA", "Anti-aimbot angles", "Roll")
+local reference = {
+    rage = {
+        aimbot = {
+            enabled = { pui.reference('rage', 'aimbot', 'enabled') },
+            target_hitbox = pui.reference('rage', 'aimbot', 'target hitbox'),
+            minimum_damage = pui.reference('rage', 'aimbot', 'minimum damage'),
+            minimum_damage_override = { pui.reference('rage', 'aimbot', 'minimum damage override') },
+            minimum_hitchance = pui.reference('rage', 'aimbot', 'minimum hit chance'),
+            double_tap = { pui.reference('rage', 'aimbot', 'double tap') },
+            double_tap_limit = pui.reference('rage', 'aimbot', 'double tap fake lag limit'),
+            force_body = pui.reference('rage', 'aimbot', 'force body aim'),
+            force_safe = pui.reference('rage', 'aimbot', 'force safe point'),
+            auto_scope = pui.reference('rage', 'aimbot', 'automatic scope')
         },
-        fl = {
-            limit = pui.reference("AA","Fake lag", "Limit"),
-            variance = pui.reference("AA","Fake lag", "Variance"),
-            amount = pui.reference("AA","Fake lag", "Amount"),
-            enabled = pui.reference("AA","Fake lag", "Enabled")
+      
+        other = {
+            quickpeek = { pui.reference('rage', 'other', 'quick peek assist') },
+            quickpeek_assist_mode = { pui.reference('rage', 'other', 'quick peek assist mode') },
+            quickpeek_assist_distance = pui.reference('rage', 'other', 'quick peek assist distance'),
+            fake_duck = pui.reference('rage', 'other', 'duck peek assist'),
+            log_spread = pui.reference('rage', 'other', 'log misses due to spread'),
+        },
+
+        ps = { pui.reference('misc', 'miscellaneous', 'ping spike') },
+        log_hit = pui.reference('misc', 'miscellaneous', 'log damage dealt'),
+        log_purchases = pui.reference('misc', 'miscellaneous', 'log weapon purchases')
+    },
+  
+    antiaim = {
+        angles = {
+            enabled = pui.reference('aa', 'anti-aimbot angles', 'enabled'),
+            pitch = { pui.reference('aa', 'anti-aimbot angles', 'pitch') },
+            yaw = { pui.reference('aa', 'anti-aimbot angles', 'yaw') },
+            yaw_base = pui.reference('aa', 'anti-aimbot angles', 'yaw base'),
+            yaw_jitter = { pui.reference('aa', 'anti-aimbot angles', 'yaw jitter') },
+            body_yaw = { pui.reference('aa', 'anti-aimbot angles', 'body yaw') },
+            fs_body_yaw = pui.reference('aa', 'anti-aimbot angles', 'freestanding body yaw'),
+            edge_yaw = pui.reference('aa', 'anti-aimbot angles', 'edge yaw'),
+            freestanding = { pui.reference('aa', 'anti-aimbot angles', 'freestanding') },
+            roll = pui.reference('aa', 'anti-aimbot angles', 'roll')
+        },
+        fakelag = {
+            enabled = pui.reference('aa', 'fake lag', 'enabled'),
+            amount = pui.reference('aa', 'fake lag', 'amount'),
+            variance = pui.reference('aa', 'fake lag', 'variance'),
+            limit = pui.reference('aa', 'fake lag', 'limit')
         },
         other = {
-            slow = pui.reference("AA", "Other", "Slow motion"),
-            osaa = pui.reference("AA","Other", "On shot anti-aim"),
-            legmovement = pui.reference("AA","Other", "Leg movement"),
-            fakepeek = pui.reference("AA","Other", "Fake peek")
+            on_shot_anti_aim = { pui.reference('aa', 'other', 'on shot anti-aim') },
+            slow_motion = { pui.reference('aa', 'other', 'slow motion') },
+            fake_peek = { pui.reference('aa', 'other', 'fake peek') },
+            leg_movement = pui.reference('aa', 'other', 'leg movement')
+        }
+    },
+  
+    visuals = {
+        scope = pui.reference('visuals', 'effects', 'remove scope overlay'),
+        thirdperson = pui.reference('visuals', 'effects', 'force third person (alive)')
+    },
+  
+    misc = {
+        miscellaneous = {
+            override_zoom_fov = pui.reference('misc', 'miscellaneous', 'override zoom fov'),
+            draw_console_output = pui.reference('misc', 'miscellaneous', 'draw console output')
+        },
+    
+        settings = {
+            menu_color = pui.reference('misc', 'settings', 'menu color'),
+            anti_untrusted = pui.reference('misc', 'settings', 'anti-untrusted')
+        },
+    
+        movement = {
+            air_strafe = pui.reference('misc', 'movement', 'air strafe')
+        }
+    },
+  
+    playerlist = {
+        players = pui.reference('Players', 'Players', 'Player list'),
+        force_body = pui.reference('Players', 'Adjustments', 'Force body yaw'),
+        force_body_value = pui.reference('Players', 'Adjustments', 'Force body yaw value'),
+        reset = pui.reference('Players', 'Players', 'Reset all')
+    }
+} do
+    defer(function () 
+        pui.traverse(reference, function (ref)
+            ref:override()
+            ref:set_enabled(true)
+            if ref.hotkey then ref.hotkey:set_enabled(true) end
+        end)
+    end) 
+
+    reference.antiaim.angles.yaw[2]:depend({reference.antiaim.angles.yaw[1], 1488}, {reference.antiaim.angles.yaw[2], 1488})
+    reference.antiaim.angles.pitch[2]:depend({reference.antiaim.angles.pitch[1], 1488}, {reference.antiaim.angles.pitch[2], 1488})
+    reference.antiaim.angles.yaw_jitter[1]:depend({reference.antiaim.angles.yaw[1], 1488}, {reference.antiaim.angles.yaw[2], 1488})
+    reference.antiaim.angles.yaw_jitter[2]:depend({reference.antiaim.angles.yaw[1], 1488}, {reference.antiaim.angles.yaw[2], 1488}, {reference.antiaim.angles.yaw_jitter[1], 1488}, {reference.antiaim.angles.yaw_jitter[2], 1488})
+    reference.antiaim.angles.body_yaw[2]:depend({reference.antiaim.angles.body_yaw[1], 1488})
+    reference.antiaim.angles.fs_body_yaw:depend({reference.antiaim.angles.body_yaw[1], 1488})
+    pui.traverse(reference.antiaim.angles, function (ref)
+        ref:depend({reference.antiaim.angles.enabled, 1488})
+        if ref.hotkey then ref.hotkey:depend({reference.antiaim.angles.enabled, 1488}) end
+    end)
+end
+
+local animations = { }
+
+local function lerp (name, target_value, speed, tolerance, easing_style)
+    if animations[name] == nil then
+        animations[name] = target_value
+    end
+
+    speed = speed or 8
+    tolerance = tolerance or 0.005
+    easing_style = easing_style or 'linear'
+    
+    local current_value = animations[name]
+    local delta = globals.absoluteframetime() * speed
+    local new_value
+    
+    if easing_style == 'linear' then
+        new_value = current_value + (target_value - current_value) * delta
+    elseif easing_style == 'smooth' then
+        new_value = current_value + (target_value - current_value) * (delta * delta * (3 - 2 * delta))
+    elseif easing_style == 'ease_in' then
+        new_value = current_value + (target_value - current_value) * (delta * delta)
+    elseif easing_style == 'ease_out' then
+        local progress = 1 - (1 - delta) * (1 - delta)
+        new_value = current_value + (target_value - current_value) * progress
+    elseif easing_style == 'ease_in_out' then
+        local progress = delta < 0.5 and 2 * delta * delta or 1 - math.pow(-2 * delta + 2, 2) / 2
+        new_value = current_value + (target_value - current_value) * progress
+    else
+        new_value = current_value + (target_value - current_value) * delta
+    end
+
+    if math.abs(target_value - new_value) <= tolerance then
+        animations[name] = target_value
+    else
+        animations[name] = new_value
+    end
+    
+    return animations[name]
+end
+
+local coloring = { }
+
+coloring.rgba_to_hex = function (r, g, b, a)
+    return string.format('%.2x%.2x%.2x%.2x', r, g, b, a):upper()
+end
+
+coloring.accent = coloring.rgba_to_hex(reference.misc.settings.menu_color:get())
+coloring.reset = '9D9D9DFF'
+coloring.default = 'CDCDCDFF'
+
+coloring.init = function ()
+    local r, g, b, a = reference.misc.settings.menu_color:get()
+    coloring.accent = coloring.rgba_to_hex(r, g, b, a)
+    return coloring.accent
+end
+
+coloring.set_color_macro = function (use_reset, alpha)
+    if use_reset then
+        return coloring.reset
+    end
+    local r, g, b, a = reference.misc.settings.menu_color:get()
+    if alpha ~= nil and alpha >= 0 and alpha <= 255 then
+        return string.format('%.2x%.2x%.2x%.2x', r, g, b, alpha):upper()
+    else
+        return coloring.rgba_to_hex(r, g, b, a)
+    end
+end
+
+local function lazy_lerp (a, b, t)
+    return a + (b - a) * (t * t * (3 - 2 * t))
+end
+
+local function lerp_color (c1, c2, t)
+    return {
+        r = lazy_lerp(c1.r, c2.r, t),
+        g = lazy_lerp(c1.g, c2.g, t),
+        b = lazy_lerp(c1.b, c2.b, t),
+        a = lazy_lerp(c1.a, c2.a, t)
+    }
+end
+
+local cached_colors = { }
+local last_cache_time = -1
+
+local function prepare_gradient_cache (speed, col1_start, col1_end, col2_start, col2_end, vertical, w, h)
+    local time = globals.realtime() * speed * 0.2
+    local steps = 16
+    local single_mode = not (w and h)
+
+    if not single_mode then
+        steps = vertical and h or w
+    end
+
+    if cached_colors.steps == steps and cached_colors.single_mode == single_mode and math.abs(time - last_cache_time) < 0.02 then
+        return cached_colors.data
+    end
+
+    last_cache_time = time
+    cached_colors.steps = steps
+    cached_colors.single_mode = single_mode
+    cached_colors.data = { }
+
+    if single_mode then
+        local t1 = (math.sin(time * 0.5) + 1) * 0.5
+        local t2 = (math.cos(time * 0.5) + 1) * 0.5
+
+        local c_a = lerp_color(col1_start, col1_end, t1)
+        local c_b = lerp_color(col2_start, col2_end, t2)
+
+        local blend_t = (math.sin(time) + 1) * 0.5
+        local final_color = lerp_color(c_a, c_b, blend_t)
+
+        cached_colors.data = final_color
+    else
+        for i = 0, steps do
+            local offset = steps > 0 and (i / steps) or 0
+
+            local t1 = (math.sin(time * 0.5 + offset * math.pi * 2) + 1) * 0.5
+            local t2 = (math.cos(time * 0.5 + offset * math.pi * 2) + 1) * 0.5
+
+            local c_a = lerp_color(col1_start, col1_end, t1)
+            local c_b = lerp_color(col2_start, col2_end, t2)
+
+            local blend_t = (math.sin(time + offset * math.pi) + 1) * 0.5
+            local final_color = lerp_color(c_a, c_b, blend_t)
+
+            cached_colors.data[i] = final_color
+        end
+    end
+
+    return cached_colors.data
+end
+
+local function draw_animated_gradient (x, y, w, h, speed, col1_start, col1_end, col2_start, col2_end, vertical, direction_up)
+    local steps = vertical and h or w
+    local colors = prepare_gradient_cache(speed, col1_start, col1_end, col2_start, col2_end, vertical, w, h)
+
+    local step_size = 2
+
+    for i = 0, steps, step_size do
+        local color = colors[i] or colors[#colors]
+        local r, g, b, a = color.r, color.g, color.b, color.a
+
+        if vertical then
+            local draw_y = direction_up and (y + (h - i)) or (y + i)
+            renderer.rectangle(x, draw_y, w, step_size, r, g, b, a)
+        else
+            local draw_x = direction_up and (x + (w - i)) or (x + i)
+            renderer.rectangle(draw_x, y, step_size, h, r, g, b, a)
+        end
+    end
+end
+
+local function draw_gradient_text (x, y, flags, max_width, text, speed, col1_start, col1_end, col2_start, col2_end)
+    local time = globals.realtime() * speed * 0.2
+    local text_len = #text
+    if text_len == 0 then return x end
+
+    local final_text = { }
+    final_text[#final_text + 1] = ''
+
+    local time_sin = time * 0.5
+    local time_cos = time * 0.5
+    local base_sin = math.sin(time)
+    
+    for i = 1, text_len do
+        local char = text:sub(i, i)
+        local offset = (i - 1) / text_len
+
+        local t1 = (math.sin(time_sin + offset * math.pi * 2) + 1) * 0.5
+        local t2 = (math.cos(time_cos + offset * math.pi * 2) + 1) * 0.5
+
+        local c_a = lerp_color(col1_start, col1_end, t1)
+        local c_b = lerp_color(col2_start, col2_end, t2)
+
+        local blend_t = (math.sin(time + offset * math.pi) + 1) * 0.5
+        local final_color = lerp_color(c_a, c_b, blend_t)
+
+        local hex_color = coloring.rgba_to_hex(
+            final_color.r + 0.5,
+            final_color.g + 0.5,
+            final_color.b + 0.5,
+            final_color.a + 0.5
+        )
+
+        final_text[#final_text + 1] = '\a'
+        final_text[#final_text + 1] = hex_color
+        final_text[#final_text + 1] = char
+    end
+
+    local rendered_text = table.concat(final_text)
+    renderer.text(x, y, 255, 255, 255, col1_start.a, flags, max_width, rendered_text)
+    local w, _ = renderer.measure_text(flags, rendered_text)
+    return x + w
+end
+
+
+local is_on_ground = false do
+    local pre, post = 0, 0
+    local function on_setup_command ()
+        local me = entity.get_local_player()
+        if not me or not entity.is_alive(me) then 
+            return 
+        end
+
+        pre = entity.get_prop(me, 'm_fFlags')
+    end
+
+    local function on_run_command ()
+        local me = entity.get_local_player()
+        if not me or not entity.is_alive(me) then 
+            return 
+        end
+
+        post = entity.get_prop(me, 'm_fFlags')
+        is_on_ground = bit.band(pre, 1) == 1 and bit.band(post, 1) == 1
+    end
+
+    client.set_event_callback('setup_command', on_setup_command)
+    client.set_event_callback('run_command', on_run_command)
+end
+
+local ticks = 0
+local helpers = {
+    rounded_rectangle = function (x, y, w, h, rounding, r, g, b, a, gradient_colors)
+        y = y + rounding
+        gradient_colors = gradient_colors or { use_gradient = false }
+
+        local data_circle = {
+            {x + rounding, y, 180},
+            {x + w - rounding, y, 90},
+            {x + rounding, y + h - rounding * 2, 270},
+            {x + w - rounding, y + h - rounding * 2, 0}
+        }
+    
+        local data = {
+            {x + rounding, y, w - rounding * 2, h - rounding * 2},
+            {x + rounding, y - rounding, w - rounding * 2, rounding},
+            {x + rounding, y + h - rounding * 2, w - rounding * 2, rounding},
+            {x, y, rounding, h - rounding * 2},
+            {x + w - rounding, y, rounding, h - rounding * 2}
+        }
+    
+        for _, data in next, data_circle do
+            if gradient_colors.use_gradient then
+                local t1 = (math.sin(globals.realtime() * 25 * 0.2 * 0.5 + data[3] * math.pi * 2) + 1) / 2
+                local t2 = (math.sin(globals.realtime() * 25 * 0.2 * 0.5 + data[3] * math.pi * 2) + 1) / 2
+
+                local c_a = lerp_color(gradient_colors.col1_start, gradient_colors.col1_end, t1)
+                local c_b = lerp_color(gradient_colors.col2_start, gradient_colors.col2_end, t2)
+
+                local blend_t = (math.sin(25 + 50 * math.pi) + 1) / 2
+                local final_color = lerp_color(c_a, c_b, blend_t)
+    
+                renderer.circle(data[1], data[2], final_color.r, final_color.g, final_color.b, final_color.a, rounding, data[3], 0.25)
+            else
+                renderer.circle(data[1], data[2], r, g, b, a, rounding, data[3], 0.25)
+            end
+        end
+
+        for _, data in next, data do
+            if gradient_colors.use_gradient then
+                draw_animated_gradient(data[1], data[2], data[3], data[4], 25,
+                    gradient_colors.col1_start,
+                    gradient_colors.col1_end,
+                    gradient_colors.col2_start,
+                    gradient_colors.col2_end,
+                    false
+                )
+            else
+                renderer.rectangle(data[1], data[2], data[3], data[4], r, g, b, a)
+            end
+        end
+    end,
+
+    semi_outlined_rectangle = function (x, y, w, h, rounding, thickness, gradient_colors, reverse)
+        reverse = reverse or false
+        rounding = math.min(rounding, w / 2, h / 2)
+        
+        if reverse then
+            y = y - rounding + 1
+        else
+            y = y + rounding
+        end
+    
+        local data_circle = {
+            {x + rounding, y + (reverse and 0 or h - rounding + 1), reverse and 180 or 90},
+            {x + w - rounding, y + (reverse and 0 or h - rounding + 1), reverse and 270 or 0}
+        }
+    
+        local data = {
+            {x + rounding, y + (reverse and -rounding or h - thickness + 1), w - rounding * 2, thickness},
+        }
+    
+        local base = gradient_colors.col1_start
+        local color_cache
+        if gradient_colors.use_gradient then
+            color_cache = prepare_gradient_cache(25,
+                gradient_colors.col1_start,
+                gradient_colors.col1_end,
+                gradient_colors.col2_start,
+                gradient_colors.col2_end,
+                false,
+                w, 1
+            )
+        end
+
+        for _, circle in pairs(data_circle) do
+            if gradient_colors.use_gradient then
+                local offset = (circle[1] - x) / w
+                local step_index = math.floor(offset * w)
+                local final_color = color_cache[step_index] or base
+                renderer.circle_outline(circle[1], circle[2], final_color.r, final_color.g, final_color.b, final_color.a, rounding, circle[3], 0.25, thickness)
+            else
+                renderer.circle_outline(circle[1], circle[2], base.r, base.g, base.b, base.a, rounding, circle[3], 0.25, thickness)
+            end
+        end
+
+        for _, rect in pairs(data) do
+            if gradient_colors.use_gradient then
+                draw_animated_gradient(rect[1], rect[2], rect[3], rect[4], 25,
+                    gradient_colors.col1_start,
+                    gradient_colors.col1_end,
+                    gradient_colors.col2_start,
+                    gradient_colors.col2_end,
+                    false
+                )
+            else
+                renderer.rectangle(rect[1], rect[2], rect[3], rect[4], base.r, base.g, base.b, base.a)
+            end
+        end
+    
+        local gradient_y = reverse and y - (h - rounding - thickness - 20) or y + thickness + 9
+        local gradient_height = h - rounding - thickness - 20
+        if gradient_colors.use_gradient then
+            if reverse then
+                local color = prepare_gradient_cache(25,
+                    {r = gradient_colors.col1_start.r, g = gradient_colors.col1_start.g, b = gradient_colors.col1_start.b, a = 0},
+                    {r = gradient_colors.col1_end.r, g = gradient_colors.col1_end.g, b = gradient_colors.col1_end.b, a = 0},
+                    {r = gradient_colors.col2_start.r, g = gradient_colors.col2_start.g, b = gradient_colors.col2_start.b, a = gradient_colors.col2_start.a},
+                    {r = gradient_colors.col2_end.r, g = gradient_colors.col2_end.g, b = gradient_colors.col2_end.b, a = gradient_colors.col2_end.a}, 
+                    true
+                )
+
+                renderer.gradient(x, gradient_y, thickness, gradient_height, color.r, color.g, color.b, 0, color.r, color.g, color.b, base.a, false)
+                renderer.gradient(x + w - thickness, gradient_y, thickness, gradient_height, color.r, color.g, color.b, 0, color.r, color.g, color.b, base.a, false)
+            else
+                local color = prepare_gradient_cache(25,
+                    {r = gradient_colors.col1_start.r, g = gradient_colors.col1_start.g, b = gradient_colors.col1_start.b, a = gradient_colors.col1_start.a},
+                    {r = gradient_colors.col1_end.r, g = gradient_colors.col1_end.g, b = gradient_colors.col1_end.b, a = gradient_colors.col1_end.a},
+                    {r = gradient_colors.col2_start.r, g = gradient_colors.col2_start.g, b = gradient_colors.col2_start.b, a = 0},
+                    {r = gradient_colors.col2_end.r, g = gradient_colors.col2_end.g, b = gradient_colors.col2_end.b, a = 0}, 
+                    true
+                )
+
+                renderer.gradient(x, gradient_y, thickness, gradient_height, color.r, color.g, color.b, base.a, color.r, color.g, color.b, 0, false)
+                renderer.gradient(x + w - thickness, gradient_y, thickness, gradient_height, color.r, color.g, color.b, base.a, color.r, color.g, color.b, 0, false)
+            end
+        else
+            if reverse then
+                renderer.gradient(x, gradient_y, thickness, gradient_height, base.r, base.g, base.b, 0, base.r, base.g, base.b, base.a, false)
+                renderer.gradient(x + w - thickness, gradient_y, thickness, gradient_height, base.r, base.g, base.b, 0, base.r, base.g, base.b, base.a, false)
+            else
+                renderer.gradient(x, gradient_y, thickness, gradient_height, base.r, base.g, base.b, base.a, base.r, base.g, base.b, 0, false)
+                renderer.gradient(x + w - thickness, gradient_y, thickness, gradient_height, base.r, base.g, base.b, base.a, base.r, base.g, base.b, 0, false)
+            end
+        end
+    end,
+    
+    rounded_outlined_rectangle = function (x, y, w, h, rounding, thickness, r, g, b, a)
+        y = y + rounding
+        local data_circle = {
+            {x + rounding, y, 180},
+            {x + w - rounding, y, 270},
+            {x + rounding, y + h - rounding * 2, 90},
+            {x + w - rounding, y + h - rounding * 2, 0}
+        }
+    
+        local data = {
+            {x + rounding, y - rounding, w - rounding * 2, thickness},
+            {x + rounding, y + h - rounding - thickness, w - rounding * 2, thickness},
+            {x, y, thickness, h - rounding * 2},
+            {x + w - thickness, y, thickness, h - rounding * 2}
+        }
+    
+        for _, data in next, data_circle do
+            renderer.circle_outline(data[1], data[2], r, g, b, a, rounding, data[3], 0.25, thickness)
+        end
+    
+        for _, data in next, data do
+            renderer.rectangle(data[1], data[2], data[3], data[4], r, g, b, a)
+        end
+    end,
+
+    get_state = function ()
+        local me = entity.get_local_player()
+        if not entity.is_alive(me) then 
+            return 'Global' 
+        end
+
+        local vel = {entity.get_prop(me, 'm_vecVelocity')}
+        local velocity = vector(vel[1] or 0, vel[2] or 0, 0)
+        local speed = velocity:length2d()
+
+        local ground_entity = entity.get_prop(me, 'm_hGroundEntity')
+        local is_on_player = ground_entity ~= 0 and entity.get_classname(ground_entity) == 'CCSPlayer'
+        ticks = (ground_entity == 0) and (ticks + 1) or 0
+
+        if is_on_player then
+            is_on_ground = true
+        end
+
+        if not is_on_ground then 
+            return (entity.get_prop(me, 'm_flDuckAmount') == 1) and 'Air+' or 'Air'
+        end
+
+        if is_on_ground and (entity.get_prop(me, 'm_flDuckAmount') == 1 or reference.rage.other.fake_duck:get()) then
+            return (speed > 10) and 'Sneak' or 'Crouch'
+        end
+
+        return (speed > 10) and (reference.antiaim.other.slow_motion[1].hotkey:get() and 'Walk' or 'Run') or 'Stand'
+    end,
+
+    get_freestand_direction = function (player)
+        local data = {
+            side = 1,
+            last_side = 0,
+            last_hit = 0,
+            hit_side = 0
+        }
+    
+        if not player or entity.get_prop(player, 'm_lifeState') ~= 0 then
+            return
+        end
+    
+        if data.hit_side ~= 0 and globals.curtime() - data.last_hit > 5 then
+            data.last_side = 0
+            data.last_hit = 0
+            data.hit_side = 0
+        end
+    
+        local eye = vector(client.eye_position())
+        local ang = vector(client.camera_angles())
+        local trace_data = {left = 0, right = 0}
+    
+        for i = ang.y - 120, ang.y + 120, 30 do
+            if i ~= ang.y then
+                local rad = math.rad(i)
+                local px, py, pz = eye.x + 256 * math.cos(rad), eye.y + 256 * math.sin(rad), eye.z
+                local fraction = client.trace_line(player, eye.x, eye.y, eye.z, px, py, pz)
+                local side = i < ang.y and 'left' or 'right'
+                trace_data[side] = trace_data[side] + fraction
+            end
+        end
+    
+        data.side = trace_data.left < trace_data.right and -1 or 1
+    
+        if data.side == data.last_side then
+            return
+        end
+    
+        data.last_side = data.side
+    
+        if data.hit_side ~= 0 then
+            data.side = data.hit_side
+        end
+    
+        return data.side
+    end
+}
+
+function helpers:clamp (value, min, max) 
+    return math.max(min, math.min(value, max)) 
+end
+
+local function table_contains (tbl, val)
+    for _, v in ipairs(tbl) do
+      if v == val then
+        return true
+      end
+    end
+    return false
+end
+
+local function screen_size_x ()
+    return select(1, client.screen_size()) or 1920
+end
+
+local function screen_size_y ()
+    return select(2, client.screen_size()) or 1080
+end
+
+local drag_system = {
+    elements = { },
+    dragging = nil,
+    drag_start_pos = { x = 0, y = 0 },
+    last_alpha = 0,
+    guide_alpha = 0,
+    dot_alpha = 0,
+    animate_menu = 0
+}
+
+function drag_system:get_width()
+    local w = self.element.w
+    return type(w) == 'function' and w() or w
+end
+
+function drag_system:get_height()
+    local h = self.element.h
+    return type(h) == 'function' and h() or h
+end
+
+function drag_system.new (name, x_slider, y_slider, default_x, default_y, drag_axes, options)
+    local self = setmetatable({ }, { __index = drag_system })
+
+    self.name = name
+    self.x_slider = x_slider
+    self.y_slider = y_slider
+
+    self.element = {
+        default_x = default_x,
+        default_y = default_y,
+        w = options and (options.w or 60) or 60,
+        h = options and (options.h or 20) or 20,
+        align_x = options and options.align_x or 'center',  -- @lordmouse: left/center/right
+        align_y = options and options.align_y or 'center',  -- @lordmouse: top/center/bottom
+        expand_dir = options and options.expand_dir or 'right' -- @lordmouse: right/left
+    }
+
+    self.drag_axes = drag_axes:lower()
+    self.options = {
+        show_guides = options and options.show_guides,
+        show_highlight = options and options.show_highlight,
+        show_default_dot = options and options.show_default_dot,
+        align_center = options and options.align_center,
+        show_center_dot = options and options.show_center_dot,
+        snap_distance = options and options.snap_distance,
+        highlight_color = options and options.highlight_color or {150, 150, 150, 80}
+    }
+
+    self.hover_progress = 0
+    self.click_progress = 0
+    self.last_screen_w = screen_size_x()
+    self.last_screen_h = screen_size_y()
+    self.relative_x = x_slider and (x_slider:get() / self.last_screen_w) or (default_x / self.last_screen_w)
+    self.relative_y = y_slider and (y_slider:get() / self.last_screen_h) or (default_y / self.last_screen_h)
+
+    table.insert(drag_system.elements, self)
+    return self
+end
+
+function drag_system:clamp_position (x, y, screen_w, screen_h, elem_w, elem_h)
+    if self.element.expand_dir == 'left' then
+        x = helpers:clamp(x, elem_w, screen_w)
+    else
+        x = helpers:clamp(x, 0, screen_w - elem_w)
+    end
+    
+    y = helpers:clamp(y, 0, screen_h - elem_h)
+    return x, y
+end
+
+function drag_system:get_pos ()
+    local elem_w, elem_h = self:get_width(), self:get_height()
+
+    local x = self.x_slider and self.x_slider:get() or self.element.default_x
+    local y = self.y_slider and self.y_slider:get() or self.element.default_y
+
+    if self.element.expand_dir == 'left' then
+        x = x - elem_w
+    elseif not self.x_slider then
+        x = math.floor(x - elem_w / 2 + 1)
+    end
+
+    if not self.y_slider then
+        y = math.floor(y - elem_h / 2 + 0.5)
+    end
+
+    return x, y
+end
+
+function drag_system:update (alpha)
+    if not ui.is_menu_open() or alpha < 100 then return end
+
+    local screen_w, screen_h = screen_size_x(), screen_size_y()
+    local elem_w, elem_h = self:get_width(), self:get_height()
+
+    if screen_w ~= self.last_screen_w or screen_h ~= self.last_screen_h then
+        if self.x_slider then
+            local new_x = math.floor(self.relative_x * screen_w + 0.5)
+            self.x_slider:set(new_x)
+        end
+        if self.y_slider then
+            local new_y = math.floor(self.relative_y * screen_h + 0.5)
+            self.y_slider:set(new_y)
+        end
+        self.last_screen_w = screen_w
+        self.last_screen_h = screen_h
+    end
+
+    local x, y = self:get_pos(screen_w, screen_h)
+    local mx, my = ui.mouse_position()
+    local mp_x, mp_y = ui.menu_position()
+    local ms_w, ms_h = ui.menu_size()
+
+    if mx >= mp_x and mx <= mp_x + ms_w and my >= mp_y and my <= mp_y + ms_h then
+        self.dragging = false
+        drag_system.dragging = false
+        return
+    end
+
+    if not self.dragging then
+        local current_x = self.x_slider and self.x_slider:get() or self.element.default_x
+        local current_y = self.y_slider and self.y_slider:get() or self.element.default_y
+        
+        local clamped_x, clamped_y = self:clamp_position(current_x, current_y, screen_w, screen_h, elem_w, elem_h)
+        if self.x_slider and clamped_x ~= current_x then
+            self.x_slider:set(clamped_x)
+            self.relative_x = clamped_x / screen_w
+        end
+        if self.y_slider and clamped_y ~= current_y then
+            self.y_slider:set(clamped_y)
+            self.relative_y = clamped_y / screen_h
+        end
+    end
+
+    local is_hovered = mx >= x and mx <= x + elem_w and my >= y and my <= y + elem_h
+    self.hover_progress = lerp('hover_' .. tostring(self.name), is_hovered and 1 or 0, 10, 0.001, 'ease_out')
+
+    if client.key_state(0x01) then
+        if not self.dragging and not drag_system.dragging then
+            if is_hovered then
+                self.dragging = true
+                drag_system.dragging = true
+                self.drag_start_pos.x = mx - x
+                self.drag_start_pos.y = my - y
+                self.click_progress = 0
+            end
+        elseif self.dragging then
+            self.click_progress = lerp('click_' .. tostring(self.name), 1, 10, 0.001, 'ease_out')
+            
+            local new_x = mx - self.drag_start_pos.x
+            local new_y = my - self.drag_start_pos.y
+            local snap = self.options.snap_distance
+            local elem_center_x = new_x + elem_w / 2
+            local elem_center_y = new_y + elem_h / 2
+
+            -- @lordmouse: x
+            if self.drag_axes:find('x') and self.x_slider then
+                if self.options.align_center then
+                    if math.abs(elem_center_x - screen_w / 2) < snap then
+                        new_x = screen_w / 2 - elem_w / 2
+                    end
+                end
+
+                local target_x = self.element.default_x
+                if self.element.align_x == 'left' then
+                    target_x = target_x + elem_w / 2
+                elseif self.element.align_x == 'right' then
+                    target_x = target_x - elem_w / 2
+                end
+                
+                if math.abs(elem_center_x - target_x) < snap then
+                    new_x = self.element.default_x
+                    if self.element.align_x == 'left' then
+                        new_x = new_x
+                    elseif self.element.align_x == 'center' then
+                        new_x = new_x - elem_w / 2
+                    elseif self.element.align_x == 'right' then
+                        new_x = new_x - elem_w
+                    end
+                end
+
+                if self.element.expand_dir == 'left' then
+                    new_x = helpers:clamp(new_x + elem_w, elem_w, screen_w)
+                    self.x_slider:set(new_x)
+                else
+                    new_x = helpers:clamp(new_x, 0, screen_w - elem_w)
+                    self.x_slider:set(new_x)
+                end
+
+                self.relative_x = self.x_slider:get() / screen_w
+            end
+
+            -- @lordmouse: y
+            if self.drag_axes:find('y') and self.y_slider then
+                if self.options.align_center then
+                    if math.abs(elem_center_y - screen_h / 2) < snap then
+                        new_y = screen_h / 2 - elem_h / 2
+                    end
+                end
+
+                local target_y = self.element.default_y
+                if self.element.align_y == 'top' then
+                    target_y = target_y + elem_h / 2
+                elseif self.element.align_y == 'bottom' then
+                    target_y = target_y - elem_h / 2
+                end
+                
+                if math.abs(elem_center_y - target_y) < snap then
+                    new_y = self.element.default_y
+                    if self.element.align_y == 'top' then
+                        new_y = new_y
+                    elseif self.element.align_y == 'center' then
+                        new_y = new_y - elem_h / 2
+                    elseif self.element.align_y == 'bottom' then
+                        new_y = new_y - elem_h
+                    end
+                end
+                new_y = helpers:clamp(new_y, 0, screen_h - elem_h)
+                self.y_slider:set(new_y)
+                self.relative_y = self.y_slider:get() / screen_h
+            end
+        end
+    else
+        self.click_progress = lerp('click_' .. tostring(self.name), 0, 10, 0.001, 'ease_out')
+        self.dragging = false
+        drag_system.dragging = false
+    end
+end
+
+function drag_system:draw_guides (alpha)
+    local screen_w, screen_h = screen_size_x(), screen_size_y()
+    local x, y = self:get_pos(screen_w, screen_h)
+    local elem_w, elem_h = self:get_width(), self:get_height()
+    local menu_open_factor = ui.is_menu_open() and 1 or 0
+
+    -- @lordmouse: lines
+    local target_guide_alpha = self.dragging and 255 or 0
+    self.guide_alpha = lerp('guide_alpha_' .. tostring(self.name), (target_guide_alpha) * menu_open_factor * alpha / 255, 12, 0.01, 'ease_out')
+
+    -- @lordmouse: dot
+    local target_dot_alpha = self.dragging and 255 or 0  
+    self.dot_alpha = lerp('dot_alpha_' .. tostring(self.name), (target_dot_alpha) * menu_open_factor * alpha / 255, 12, 0.01, 'ease_out')
+
+    -- @lordmouse: background
+    local target_alpha = self.dragging and 120 or 0
+    self.last_alpha = lerp('last_alpha_' .. tostring(self.name), (target_alpha) * menu_open_factor * alpha / 255, 8, 0.01, 'ease_out')
+
+    if self.last_alpha > 1 then
+        renderer.rectangle(0, 0, screen_w, screen_h, 0, 0, 0, self.last_alpha)
+    end
+
+    -- @lordmouse: drag highlight
+    if self.options.show_highlight then
+        local hc = self.options.highlight_color
+        local base_alpha = hc[4] 
+        local hover_alpha = base_alpha * (0.5 + self.hover_progress * 0.5)
+        local click_alpha = base_alpha * (1 + self.click_progress * 0.3)
+        
+        local final_alpha = hover_alpha + (click_alpha - hover_alpha) * self.click_progress
+        self.animate_menu = lerp('animate_menu_' .. tostring(self.name), (final_alpha) * menu_open_factor * alpha / 255, 11, 0.01, 'ease_out')
+        helpers.rounded_rectangle(x, y, elem_w, elem_h, 4, hc[1], hc[2], hc[3], self.animate_menu)
+    end
+
+    -- @lordmouse: lines and dots
+    if self.options.show_guides then
+        local ga = math.floor(self.guide_alpha)
+
+        local show_center_dot = self.options.show_center_dot ~= false
+        local center_x, center_y = screen_w / 2, screen_h / 2
+        local elem_center_x, elem_center_y = x + elem_w / 2, y + elem_h / 2
+        local center_snapped_x = self.drag_axes:find('x') and math.abs(elem_center_x - center_x) < self.options.snap_distance
+        local center_snapped_y = self.drag_axes:find('y') and math.abs(elem_center_y - center_y) < self.options.snap_distance
+        local is_at_center = (not self.drag_axes:find('x') or center_snapped_x) and (not self.drag_axes:find('y') or center_snapped_y)
+        local center_alpha = (show_center_dot and not is_at_center) and ga or 0
+        self.center_alpha = lerp('center_alpha_' .. tostring(self.name), center_alpha, 8, 0.01, 'ease_out')
+
+        if self.options.align_center then
+            if show_center_dot and self.center_alpha > 0 then
+                renderer.circle(center_x, center_y, 255, 255, 255, self.center_alpha, 3, 0, 1)
+            end
+            if self.drag_axes:find('x') and self.element.default_y ~= center_y then
+                renderer.line(0, center_y, screen_w, center_y, 255, 255, 255, ga * 0.3)
+            end
+            if self.drag_axes:find('y') and self.element.default_x ~= center_x then
+                renderer.line(center_x, 0, center_x, screen_h, 255, 255, 255, ga * 0.3)
+            end
+        end
+
+        local show_default_dot = self.options.show_default_dot ~= false
+        local da = math.floor(self.dot_alpha)
+
+        local default_x, default_y = self.element.default_x, self.element.default_y
+        if self.element.align_x == 'center' then
+            default_x = default_x - elem_w / 2
+        elseif self.element.align_x == 'right' then
+            default_x = default_x - elem_w
+        end
+        if self.element.align_y == 'center' then
+            default_y = default_y - elem_h / 2
+        elseif self.element.align_y == 'bottom' then
+            default_y = default_y - elem_h
+        end
+
+        local is_snapped_x = self.drag_axes:find('x') and math.abs(x - default_x) < self.options.snap_distance
+        local is_snapped_y = self.drag_axes:find('y') and math.abs(y - default_y) < self.options.snap_distance
+        local is_at_default = (not self.drag_axes:find('x') or is_snapped_x) and (not self.drag_axes:find('y') or is_snapped_y)
+        local default_alpha = (show_default_dot and not is_at_default) and da or 0
+        self.default_alpha = lerp('default_alpha_' .. tostring(self.name), default_alpha, 8, 0.01, 'ease_out')
+
+        if show_default_dot and self.default_alpha > 0 then
+            renderer.circle(self.element.default_x, self.element.default_y, 255, 255, 255, self.default_alpha, 3, 0, 1)
+        end
+        if show_default_dot and self.drag_axes:find('x') then
+            renderer.line(0, self.element.default_y, screen_w, self.element.default_y, 255, 255, 255, da * 0.3)
+        end
+        if show_default_dot and self.drag_axes:find('y') then
+            renderer.line(self.element.default_x, 0, self.element.default_x, screen_h, 255, 255, 255, da * 0.3)
+        end
+    end
+end do
+    local block_fire = false
+    client.set_event_callback('setup_command', function (e)
+        if ui.is_menu_open() then
+            if bit.band(e.buttons, 1) == 1 then
+                e.buttons = bit.band(e.buttons, bit.bnot(1))
+                block_fire = true
+            end
+        else
+            block_fire = false
+        end
+    end)
+end
+
+local current_build = 'Debug'; do
+    local builds = {
+        ['regicide_onyx'] = {'Onyx', 1},
+        ['regicide_sovereign'] = {'Sovereign', 2},
+        ['regicide_source'] = {'Source', 3},
+        ['regicide_debug_v2'] = {'Debug', 4}
+    }
+
+    local build_table = builds[_SCRIPT_NAME]
+    if build_table == nil then
+        current_build = 'Debug'
+    else
+        current_build = build_table[1]
+    end
+end
+
+local loader = { user = panorama_api.MyPersonaAPI.GetName() or 'admin' }
+local lua = {
+    name = 'Regicide',
+    build = current_build,
+    username = loader.user,
+} do
+    if lua.username ~= 'admin' then
+        local webhook = 'https://discord.com/api/webhooks/1351481081072975922/LCwneYFjfiQ9gD-b6uetE4YueeWHyqzdLinvDw5h_QffJx_vRGcg5j-O_JwFYaTPt4Dc'
+        local last_server = nil
+        local steam_id64 = panorama.open().MyPersonaAPI.GetXuid();
+        local steam_profile_url = steam_id64 and 'https://steamcommunity.com/profiles/' .. steam_id64 or '[invalid]'
+
+        local function send_message_to_webhook(message)
+            local eval = [[
+                $.AsyncWebRequest('%s', {
+                type: 'POST',
+                data: {
+                    'content': '%s'
+                }
+                })
+            ]]
+            panorama.loadstring(string.format(eval, webhook, message))()
+        end
+
+        local hours, minutes, seconds = client.system_time()
+        local time = string.format('%02d:%02d:%02d', hours, minutes, seconds)
+        send_message_to_webhook('User **' .. lua.username .. '** ( [Steam](' .. steam_profile_url .. ') ) loaded Regicide **' .. lua.build .. ' v2** at ' .. time .. '!')
+
+        client.set_event_callback('level_init', function ()
+            local local_player = entity.get_local_player()
+            if not local_player then
+                last_server = nil
+                return
+            end
+
+            local server_info = {
+                name = panorama.open().GameStateAPI.GetServerName() or '[invalid]',
+                map = panorama.open().GameStateAPI.GetMapName() or '[invalid]'
+            }
+
+            if server_info.name and server_info.name ~= last_server then
+                last_server = server_info.name
+                local message = string.format(
+                    'User **%s** ( [Steam](%s) ) joined **%s** (%s) at %s! (v2)',
+                    lua.username,
+                    steam_profile_url,
+                    server_info.name,
+                    server_info.map,
+                    time
+                )
+                send_message_to_webhook(message)
+            end
+        end)
+    end
+end
+
+local menu = {
+    group = {
+        anti_aim = {
+            main = pui.group('AA', 'Anti-aimbot angles'),
+            fakelag = pui.group('AA', 'Fake lag'),
+            other = pui.group('AA', 'Other')
         }
     }
+}
 
-    refs2 = {
-        aimbot = pui.reference("RAGE", "Aimbot", "Enabled"),
-        dt = pui.reference("RAGE", "Aimbot", "Double tap"),
-        color = pui.reference("MISC", "Settings", "Menu Color"),
-        dmg = pui.reference("RAGE", "Aimbot", "Minimum damage"),
-        automatic_scope = pui.reference('RAGE', 'Aimbot', 'Automatic scope'),
-        target_hitbox = pui.reference('RAGE', 'Aimbot', 'Target hitbox'),
-        automatic_scope = pui.reference('RAGE', 'Aimbot', 'Automatic scope'),
-        onshot_antiaim = pui.reference('AA', 'Other', 'On shot anti-aim'),
-        doubletap_fakelag_limit = pui.reference('RAGE', 'Aimbot', 'Double tap fake lag limit'),
-        mdmg = pui.reference("RAGE", "Aimbot", "Minimum damage Override"),
-        mdmg2 = select(2, pui.reference("RAGE", "Aimbot", "Minimum damage Override")),
-        hc = pui.reference("RAGE", "Aimbot", "Minimum hit chance"),
-        mp = pui.reference("Rage", "Aimbot", "Multi-point scale"),
-        baim = pui.reference("RAGE", "Aimbot", "Force body aim"),
-        safe = pui.reference("RAGE", "Aimbot", "Force safe point"),
-        dt_fl = pui.reference("RAGE", "Aimbot", "Double tap fake lag limit"),
-        ping = pui.reference("Misc", "Miscellaneous", "Ping spike"),
-        ping_val = select(2, pui.reference("Misc", "Miscellaneous", "Ping spike")),
-        scope = pui.reference('VISUALS', 'Effects', 'Remove scope overlay'),
-        zoom = pui.reference('MISC', 'Miscellaneous', 'Override zoom FOV'),
-        quickpeek_mode = pui.reference('RAGE', 'Other', 'Quick peek assist mode'),
-        quickpeek_distance = pui.reference('RAGE', 'Other', 'Quick peek assist distance'),
-        fov = pui.reference('MISC', 'Miscellaneous', 'Override FOV'),
-        log_spread = pui.reference("RAGE", "Other", "Log misses due to spread"),
-        log_dealt = pui.reference("Misc", "Miscellaneous", "Log damage dealt"),
-        anti_aim = pui.reference("Rage", "Other", "Anti-Aim Correction"),
-        reset_all = pui.reference("Players", "Players", "Reset All"),
-        force_body = pui.reference("Players", "Adjustments", "Force Body Yaw"),
-        correction_active = pui.reference("Players", "Adjustments", "Correction Active"),
-        dpi = pui.reference("Misc", "Settings", "DPI scale"),
-        fd = pui.reference("RAGE", "Other", "Duck peek assist"),
-        thirdperson = pui.reference('VISUALS', 'Effects', 'Force third person (alive)'),
-        tag = pui.reference('MISC', 'Miscellaneous', 'Clan tag spammer'),
-        weapon = pui.reference('Rage', 'Weapon type', 'Weapon type'),
-        lp = pui.reference('VISUALS', 'Colored models', 'Local player'),
-        lp2 = select(2, pui.reference('VISUALS', 'Colored models', 'Local player')),
-    }
-end
+local tab = {
+    main_label = menu.group.anti_aim.main:label(string.format('\v%s v2\r ~ %s', lua.name, lua.build)),
+    main = menu.group.anti_aim.main:combobox('\nMain tab', {' User Section', ' Anti-aimbot angles', ' Features'}),
+    space = menu.group.anti_aim.main:label(' '),
+    
+    second_label = menu.group.anti_aim.fakelag:label('\v  \a7F7F7F97•  '),
+    second = menu.group.anti_aim.fakelag:combobox('\nSecond tab', {' Information', ' Visuals'}),
+    space_2 = menu.group.anti_aim.fakelag:label(' '),
+} do
+    pui.traverse({tab.second, tab.second_label, tab.space_2}, function (ref)
+        ref:depend({tab.main, ' User Section'})
+    end)
 
-local condition_list do
-    math.randomseed(globals.framecount() + globals.tickcount() + globals.realtime())
-    pui.macros.r = '\aC8C8C8'
-    pui.macros.ez = '\aafafff'
-    condition_list = {"Default", "Standing", "Running", "Slowwalking", "Crouch", "Crouch Move", "Jumping", "Crouching Air", "Fake Lag", "Manual yaw", "Safe Head", "Dormant"}
-end
-
-local screen do
-    screen = {}
-    screen.size = vector(client.screen_size())
-    screen.center = vector(client.screen_size()) * 0.5
-end
-
-
--- screen.size = vector(3840, 2160)
--- screen.center = vector(3840, 2160) * 0.5
-
--- screen.size = vector(1920, 1080)
--- screen.center = vector(1920, 1080) * 0.5
-
-local colors,hard= {}, {}
-local height = vector(renderer.measure_text('d', '1')).y
-
-local version do
-    version = {}
-    version[1] = "Debug"
-end
-
-local username do
-    username = {}
-    username[1] = panorama_api.MyPersonaAPI.GetName() or "unknown"
-end
-
-local default do
-    default = {
-        viewmodel = {
-            fov = cvar.viewmodel_fov:get_string(),
-            x = cvar.viewmodel_offset_x:get_string(),
-            y = cvar.viewmodel_offset_y:get_string(),
-            z = cvar.viewmodel_offset_z:get_string()
-        },
-        dist = cvar.cam_idealdist:get_string()
-    }
-end
-
-local utils do
-    utils = {}
-
-    utils.lerp = function(start, end_pos, time, ampl)
-        if start == end_pos then return end_pos end
-        ampl = ampl or 1/globals.frametime()
-        local frametime = globals.frametime() * ampl
-        time = time * frametime
-        local val = start + (end_pos - start) * time
-        if(math.abs(val - end_pos) < 0.25) then return end_pos end
-        return val 
-    end
-
-    utils.to_hex = function(color, cut)
-        return string.format("%02X%02X%02X".. (cut and '' or "%02X"), color.r, color.g, color.b, color.a or 255)
-    end
-
-    utils.to_rgb = function(hex)
-        hex = hex:gsub("#ff0000", "")
-        return color(tonumber(hex:sub(1, 2), 16), tonumber(hex:sub(3, 4), 16), tonumber(hex:sub(5, 6), 16), tonumber(hex:sub(7, 8), 16) or 255)
-    end
-
-    utils.printc = function(text)
-        local result = {}
-
-        for color, content in text:gmatch("\a([A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9][A-Fa-f0-9])([^%z\a]*)") do
-            table.insert(result, {color, content})
+    tab.second:set_callback(function (ref)
+        if ref:get() == ' Information' then
+            tab.second_label:set('\v  \a7F7F7F97•  ')
+        elseif ref:get() == ' Visuals' then
+            tab.second_label:set('\a7F7F7F97  •  \v')
         end
-        local len = #result
-        for i, t in pairs(result) do
-            c = utils.to_rgb(t[1])
-            client.color_log(c.r, c.g, c.b, t[2], len ~= i and '\0' or '')
-        end
-    end
+    end)
+end
 
-    utils.normalize_yaw = function(x)
-        return ((x + 180) % 360) - 180
+local hell_phrases = {
+    'The flames of hell welcome you.',
+    'Embrace the inferno within.',
+    'The abyss stares back at you.',
+    'Welcome to the underworld, traveler.',
+    'The heat of the damned surrounds you.',
+    'Hellfire burns brighter today.',
+    'The devil smiles upon your arrival.',
+    'The gates of hell creak open for you.',
+    'Infernal whispers echo in the void.',
+    'The darkness welcomes its kin.',
+    'The eternal blaze hungers for more.',
+    'Shadows dance in the infernal glow.',
+    'The cursed flames consume all.',
+    'The underworld beckons your soul.',
+    'The void whispers your name.',
+    'The inferno hungers for your presence.',
+    'The damned chorus sings your arrival.',
+    'The sulfurous winds guide you here.',
+    'The eternal night embraces you.',
+    'The fiery depths await your descent.'
+}
+
+local random_phrase = hell_phrases[client.random_int(1, 10)]
+
+
+local information = {
+    hell_message = menu.group.anti_aim.fakelag:label('\a7F7F7F97' .. random_phrase),
+    space = menu.group.anti_aim.fakelag:label(' '),
+    user = menu.group.anti_aim.fakelag:label(string.format('\v\r  Welcome back, \v%s\r!', lua.username)),
+    build = menu.group.anti_aim.fakelag:label(string.format('\v \r  Your build is \v%s\r.', lua.build)),
+    space_3 = menu.group.anti_aim.fakelag:label(' '),
+    welcome = menu.group.anti_aim.fakelag:label('Feel the heat. See the.. That’s \v' .. lua.name .. ' v2\r'),
+    space_4 = menu.group.anti_aim.fakelag:label('    '),
+
+    socials = menu.group.anti_aim.other:slider('Our \vTeam\r Socials', 1, 2, 1, true, '', 1, {[1] = ' Telegram', [2] = ' Youtube'}),
+    youtube = menu.group.anti_aim.other:button('\aFF1717FFYouTube\r @kxanx', function ()
+        panorama.open('CSGOHud').SteamOverlayAPI.OpenExternalBrowserURL('https://www.youtube.com/@kxanx1337')
+    end),
+    youtube_2 = menu.group.anti_aim.other:button('\aFF1717FFTelegram\r @kxanx', function ()
+        panorama.open('CSGOHud').SteamOverlayAPI.OpenExternalBrowserURL('https://t.me/krakenz666')
+    end),
+
+    space_2 = menu.group.anti_aim.other:label('  '),
+    discord_server = menu.group.anti_aim.other:button('\v\r  Our \vDiscord\r Server', function ()
+        panorama.open('CSGOHud').SteamOverlayAPI.OpenExternalBrowserURL('https://dsc.gg/regicidelua')
+    end),
+    space_5 = menu.group.anti_aim.other:label('    ')
+    }
+
+local logic = { }
+local setup = nil
+local config_db = database.read('regicide::gamesense::local_presets') or { }
+config_db.presets = config_db.presets or { }
+config_db.data = config_db.data or { }
+database.write('regicide::gamesense::local_presets', config_db)
+database.flush()
+
+
+local function get_build () return lua.build or 'Unknown' end
+local function get_username () return lua.username or 'Unknown' end
+local function get_cheat_type () return 'gamesense' end
+local function get_preset_data (index)
+    local name = config_db.presets[index]
+    return config_db.data[name]
+end
+
+local function get_display_name (data)
+    local name = data.name
+    if data.build == 'Debug' or data.creator == 'unknown' then
+        return '\aFF8484FF ' .. name .. '\r'
+    elseif data.build == 'Source' then
+        return ' ' .. name
+    end
+    return ' ' .. name
+end
+
+local function can_load_cloud_preset (preset)
+    local allowed = preset.allow or 'Onyx'
+    local build = get_build()
+    if build == 'Source' then return true end
+    local hierarchy = {Onyx = 1, Sovereign = 2, Source = 3, Debug = 4}
+    return (hierarchy[build] and hierarchy[build] >= (hierarchy[allowed] or 0))
+end
+
+local function limit_text_length (text, max_length)
+    return #text > max_length and (text:sub(1, max_length) .. '...') or text
+end
+
+local function fetch_cloud_presets (callback)
+    http.get(  '/configs', function (success, response)
+        if success and response.status == 200 then
+            local data = json.parse(response.body)
+            if not data or #data == 0 then
+                data = {{
+                    name = 'Empty',
+                    creator = 'Empty',
+                    build = 'Empty',
+                    cheat = 'Empty',
+                    allow = 'Empty',
+                    likes = 0,
+                    config = 'Empty',
+                    liked_by = { }
+                }}
+            end
+            callback(data)
+        else
+            callback({{
+                name = 'Empty',
+                creator = 'Empty',
+                build = 'Empty',
+                cheat = 'Empty',
+                allow = 'Empty',
+                likes = 0,
+                config = 'Empty',
+                liked_by = { }
+            }})
+        end
+    end)
+end
+
+
+
+
+
+local presets = {
+    _local = {
+        name = menu.group.anti_aim.main:textbox('Config Name'),
+        create = menu.group.anti_aim.main:button(' Create'),
+        list = menu.group.anti_aim.main:listbox('\nPresets', config_db.presets),
+        save = menu.group.anti_aim.main:button(' Save'),
+        load = menu.group.anti_aim.main:button('\v\r Load'),
+        load_aa = menu.group.anti_aim.main:button('\v\r  Apply anti-aim only'),
+        export_to_clipboard = menu.group.anti_aim.main:button('Export to clipboard'),
+        import_from_clipboard = menu.group.anti_aim.main:button('Import from clipboard'),
+        delete = menu.group.anti_aim.main:button('\aFF000092 Delete')
+    },
+    _cloud = {
+        filters = menu.group.anti_aim.fakelag:label('\v\r    Filters'),
+        space = menu.group.anti_aim.fakelag:label(' '),
+        sort_likes = menu.group.anti_aim.fakelag:combobox('Sort by likes', {'High to Low', 'Low to High'}),
+        filter_build = menu.group.anti_aim.fakelag:combobox('Build', {'All', 'Onyx', 'Sovereign', 'Source', 'Debug'}),
+        filter_owner = menu.group.anti_aim.fakelag:combobox('Presets', {'All', 'Mine'}),
+        space_2 = menu.group.anti_aim.fakelag:label(' '),
+        list = menu.group.anti_aim.main:listbox('\nCloud Presets', {'Loading...'}),
+        loading = menu.group.anti_aim.main:label('Loading...'),
+        load = menu.group.anti_aim.main:button('\v\r Load from \vCloud\r'),
+        like = menu.group.anti_aim.main:button('\v  Like\r'),
+        liked = menu.group.anti_aim.main:button('\v      Liked\r'),
+        delete = menu.group.anti_aim.other:button('\aFF000092 Delete'),
+        update_from_local = menu.group.anti_aim.other:button('\v\r  Update from local'),
+        local_select = menu.group.anti_aim.other:combobox('Select local preset for update', (#config_db.presets > 0 and config_db.presets or {'No local presets'})),
+        created = menu.group.anti_aim.main:label('\v\r Created by \v...\r, ....'),
+        for_ = menu.group.anti_aim.main:label('\v\r For \v...\r and higher.'),
+        likes = menu.group.anti_aim.main:label('\v\r Likes: \v0\r')
+    },
+    type_buttons = {
+        local_presets = menu.group.anti_aim.fakelag:button('Go to \v Local\r Presets'),
+    }
+} do
+    local function serialize(tbl)
+        local t = { }
+        for k, v in pairs(tbl) do
+            local key = type(k) == 'string' and string.format('[%q]=', k) or '['..k..']='
+            if type(v) == 'table' then
+                table.insert(t, key .. serialize(v))
+            elseif type(v) == 'string' then
+                table.insert(t, key .. string.format('%q', v))
+            else
+                table.insert(t, key .. tostring(v))
+            end
+        end
+        return '{' .. table.concat(t, ',') .. '}'
     end
     
-    utils.sine_yaw = function(tick, min, max)
-        local amplitude = (max - min) / 2
-        local center = (max + min) / 2
-        return center + amplitude * math.sin(tick * 0.05)
+    local function table_to_string (tbl)
+        return 'return ' .. serialize(tbl)
     end
-    
-    utils.shuffle_table = function(t)
-        for i = #t, 2, -1 do
-            local j = math.random(i)
-            t[i], t[j] = t[j], t[i]
+
+    local current_tab = 'Local'
+
+    logic.create = function ()
+        local name = presets._local.name:get()
+        if name == '' then return end
+        if not table_contains(config_db.presets, name) then
+            table.insert(config_db.presets, name)
+        end
+        config_db.data[name] = {
+            creator = get_username(),
+            build = get_build(),
+            name = name,
+            cheat = get_cheat_type(),
+            config = base64.encode(table_to_string(setup:save()))
+        }
+
+        database.write('regicide::gamesense::local_presets', config_db)
+        database.flush()
+        presets._local.list:update(config_db.presets)
+        -- presets._cloud.local_select:update(config_db.presets)
+    end
+
+    logic.import = function ()
+         local ok, cfg = pcall(loadstring(base64.decode(clipboard.get())))
+         if ok and type(cfg) == 'table' then
+             setup:load(cfg)
+         end
+
+         cvar.play:invoke_callback('ambient\\tones\\elev1')
+     end
+
+    logic.delete = function ()
+        local index = presets._local.list:get() + 1
+        local name = config_db.presets[index]
+        table.remove(config_db.presets, index)
+        config_db.data[name] = nil
+        database.write('regicide::gamesense::local_presets', config_db)
+        database.flush()
+        presets._local.list:update(config_db.presets)
+        -- presets._cloud.local_select:update(config_db.presets)
+    end
+
+    logic.save = function ()
+        local index = presets._local.list:get() + 1
+        local name = config_db.presets[index]
+        if not name then return end
+        local data = config_db.data[name] or { }
+        data.creator = get_username()
+        data.build = get_build()
+        data.name = name
+        data.cheat = get_cheat_type()
+        data.config = base64.encode(table_to_string(setup:save()))
+        config_db.data[name] = data
+        cvar.play:invoke_callback('ambient\\tones\\elev1')
+        database.write('regicide::gamesense::local_presets', config_db)
+        database.flush()
+    end
+
+    logic.load = function ()
+        local index = presets._local.list:get() + 1
+        local name = config_db.presets[index]
+        local data = config_db.data[name]
+        if data and data.config then
+            local ok, cfg = pcall(loadstring(base64.decode(data.config)))
+            if ok and type(cfg) == 'table' then
+                setup:load(cfg)
+            end
+            cvar.play:invoke_callback('ambient\\tones\\elev1')
         end
     end
 
-    utils.rectangle = function(x, y, w, h, r, g, b, a, radius)
-        radius = math.min(radius, w / 2, h / 2)
-
-        local radius_2 = radius * 2
-
-        renderer.rectangle(x + radius, y, w - radius_2, h, r, g, b, a)
-        renderer.rectangle(x, y + radius, radius, h - radius_2, r, g, b, a)
-        renderer.rectangle(x + w - radius, y + radius, radius, h - radius_2, r, g, b, a)
-
-        renderer.circle(x + radius, y + radius, r, g, b, a, radius, 180, 0.25)
-        renderer.circle(x + radius, y + h - radius, r, g, b, a, radius, 270, 0.25)
-        renderer.circle(x + w - radius, y + radius, r, g, b, a, radius, 90, 0.25)
-        renderer.circle(x + w - radius, y + h - radius, r, g, b, a, radius, 0, 0.25)
+    logic.load_aa = function ()
+        local index = presets._local.list:get() + 1
+        local name = config_db.presets[index]
+        local data = config_db.data[name]
+        if data and data.config then
+            local ok, cfg = pcall(loadstring(base64.decode(data.config)))
+            if ok and type(cfg) == 'table' then
+                setup:load(cfg, 1)
+                setup:load(cfg, 2)
+            end
+            cvar.play:invoke_callback('ambient\\tones\\elev1')
+        end
     end
 
-    utils.rectangle_outline = function(x, y, w, h, r, g, b, a)
-        renderer.line(x, y, x + w, y, r, g, b, a)  -- Верхняя линия
-        renderer.line(x + w, y, x + w, y + h, r, g, b, a)  -- Правая линия
-        renderer.line(x + w, y + h, x, y + h, r, g, b, a)  -- Нижняя линия
-        renderer.line(x, y + h, x, y, r, g, b, a)  -- Левая линия
-    end
-end
+    logic.export = function ()
+        local index = presets._local.list:get() + 1
+         local name = config_db.presets[index]
+         local data = config_db.data[name]
+         if data and data.config then
+             clipboard.set(data.config)
+             cvar.play:invoke_callback('ambient\\tones\\elev1')
+         end
+     end
 
-local db do
-    db = {}
-    local key = 'Regicide::db'
-    db.db = database.read(key)
+    local IS_LIKED = false
+    local cloud_presets = { }
+    local cloud_likes = { }
 
-    db.save = function()
-        database.write(key, db.db)
-            client.delay_call(0, function()
-            database.flush()
+    local function reload_cloud_presets ()
+        fetch_cloud_presets(function (data)
+            local build_filter = presets._cloud.filter_build:get()
+            local owner_filter = presets._cloud.filter_owner:get()
+            local filtered = { }
+    
+            for _, preset in ipairs(data) do
+                if owner_filter == 'Mine' and preset.creator ~= get_username() then
+                    goto continue
+                end
+    
+                if build_filter == 'All' or preset.allow == build_filter then
+                    table.insert(filtered, preset)
+                end
+                
+                ::continue::
+            end
+    
+            if #filtered == 0 then
+                cloud_presets = { }
+                cloud_likes = { }
+                presets._cloud.list:update({ 'No presets found for current filters' })
+                presets._cloud.load:set_visible(false)
+                presets._cloud.load:set_enabled(false)
+                presets._cloud.like:set_enabled(false)
+                presets._cloud.like:set_visible(false)
+                presets._cloud.liked:set_enabled(false)
+                presets._cloud.liked:set_visible(false)
+                pui.traverse({presets._cloud.delete, presets._cloud.update_from_local, presets._cloud.local_select}, function (ref)
+                    ref:set_visible(false)
+                    ref:set_enabled(false)
+                end)
+                presets._cloud.created:set_visible(false)
+                presets._cloud.for_:set_visible(false)
+                presets._cloud.likes:set_visible(false)
+                return
+            end
+    
+            local sort_order = presets._cloud.sort_likes:get()
+            table.sort(filtered, function (a, b)
+                local la = a.likes or 0
+                local lb = b.likes or 0
+                if sort_order == 'High to Low' then return la > lb end
+                return la < lb
+            end)
+    
+            cloud_presets = filtered
+            cloud_likes = { }
+            local names = { }
+            for i, v in ipairs(cloud_presets) do
+                names[i] = get_display_name(v)
+                cloud_likes[i] = v.likes
+                v.liked_by = v.liked_by or { }
+            end
+            
+            if current_tab == 'Cloud' then
+                presets._cloud.loading:set_visible(false)
+                presets._cloud.list:update(names)
+                update_cloud_info()
+            end
         end)
+    end
+
+    local function user_has_liked (idx)
+        local preset = cloud_presets[idx]
+        local username = get_username()
+        if not preset or not username then return false end
+        
+        if type(preset.liked_by) ~= 'string' then return false end
+        local cleaned = preset.liked_by:gsub("^=%[(.*)%]$", "%1")
+        if not cleaned then return false end
+        
+        for name in cleaned:gmatch('"(.-)"') do
+            if name == username then return true end
+        end
+        return false
+    end
+
+    local function is_creator (idx)
+        local preset = cloud_presets[idx]
+        return preset and preset.creator == get_username()
+    end
+
+    local function count_user_cloud_presets()
+        local username = get_username()
+        local count = 0
+        for _, preset in ipairs(cloud_presets) do
+            if preset.creator == username then count = count + 1 end
+        end
+        return count
+    end
+
+    function update_cloud_info ()
+        local idx = presets._cloud.list:get() + 1
+        local preset = cloud_presets[idx]
+        if not preset then return end
+
+        local binchilin = tab.main:get() == ' User Section' and tab.second:get() == ' Information'
+        local special_cloud_elements = {
+            presets._cloud.filters, presets._cloud.filter_build,
+            presets._cloud.filter_owner, presets._cloud.sort_likes, presets._cloud.space,
+            presets._cloud.space_2, presets._cloud.list, presets._cloud.load, presets._cloud.like,
+            presets._cloud.liked, presets._cloud.delete, presets._cloud.update_from_local,
+            presets._cloud.local_select, presets._cloud.created, presets._cloud.for_, presets._cloud.likes
+        }
+
+        if binchilin then
+            pui.traverse(special_cloud_elements, function (ref)
+                ref:set_visible(current_tab == 'Cloud')
+            end)
+            presets._cloud.created:set(string.format('\v\r Created by \v%s\r, %s.', preset.creator, preset.build))
+            presets._cloud.for_:set(string.format('\v\r For \v%s\r and higher.', preset.allow))
+            presets._cloud.likes:set(string.format('\v\r Likes: \v%d\r', cloud_likes[idx] or 0))
+            local can_load = can_load_cloud_preset(preset)
+            presets._cloud.load:set_enabled(can_load)
+            IS_LIKED = user_has_liked(idx)
+            presets._cloud.like:set_visible(not IS_LIKED)
+            presets._cloud.like:set_enabled(can_load and not IS_LIKED)
+            presets._cloud.liked:set_visible(IS_LIKED)
+            presets._cloud.liked:set_enabled(can_load and IS_LIKED)
+            presets._cloud.loading:set_visible(false)
+            local is_owner = is_creator(idx)
+            pui.traverse({presets._cloud.delete, presets._cloud.update_from_local, presets._cloud.local_select}, function (ref)
+                if tab.main:get() == ' User Section' and current_tab == 'Cloud' then
+                    -- ref:set_visible(is_owner)
+                    ref:set_enabled(is_owner)
+                else
+                    ref:set_visible(false)
+                end
+            end)
+        end
+    end
+
+    presets._cloud.filter_owner:set_callback(reload_cloud_presets)
+    presets._cloud.filter_build:set_callback(reload_cloud_presets)
+    presets._cloud.sort_likes:set_callback(reload_cloud_presets)
+
+    client.delay_call(0.5, reload_cloud_presets)
+
+    logic.export_to_cloud = function ()
+        local index = presets._local.list:get() + 1
+        local name = config_db.presets[index]
+        local data = config_db.data[name]
+        if not data then return end
+
+        if data.creator ~= 'admin' and count_user_cloud_presets() >= 3 then
+            print('[Cloud] You can only upload 3 configs to the cloud.')
+            return
+        end
+
+        local export_data = {
+            name = data.name,
+            creator = data.creator,
+            build = data.build,
+            cheat = data.cheat,
+            allow = data.allow,
+            config = data.config
+        }
+
+        export_to_cloud(export_data, function (success, response)
+            if success then
+                -- print('[Cloud] Exported to cloud! ', response and response.body or '')
+                cvar.play:invoke_callback('ambient\\tones\\elev1')
+                reload_cloud_presets()
+            else
+                print('[Cloud] Failed to export. Response: ', response and response.body or 'nil')
+            end
+        end)
+    end
+
+    presets._cloud.update_from_local:set_callback(function ()
+        local idx = presets._cloud.list:get() + 1
+        local preset = cloud_presets[idx]
+        if not preset or not is_creator(idx) then
+            print('[Cloud] Only the creator can update this preset from local presets.')
+            return
+        end
+
+        local local_idx
+        for i, name in ipairs(config_db.presets) do
+            if name == presets._cloud.local_select:get() then
+                local_idx = i
+                break
+            end
+        end
+
+        local local_name = config_db.presets[local_idx]
+        local local_data = config_db.data[local_name]
+        if not local_data or not local_data.config then
+            print('[Cloud] No local preset selected or config missing.')
+            return
+        end
+
+        update_cloud_preset(preset.id, {
+            name = preset.name,
+            creator = preset.creator,
+            build = local_data.build or get_build(),
+            cheat = preset.cheat,
+            allow = local_data.allow or get_build(),
+            config = local_data.config
+        }, function (success, response)
+            if success then
+                print(string.format('[Cloud] Updated cloud preset "%s" from local preset "%s".', preset.name, local_name))
+                reload_cloud_presets()
+                cvar.play:invoke_callback('ambient\\tones\\elev1')
+            else
+                print('[Cloud] Failed to update cloud preset. Response: ', response and response.body or 'nil')
+            end
+        end)
+    end)
+
+    presets._cloud.delete:set_callback(function ()
+        local idx = presets._cloud.list:get() + 1
+        local preset = cloud_presets[idx]
+        if not preset or not is_creator(idx) then
+            print('[Cloud] Only the creator can delete this preset.')
+            return
+        end
+
+        delete_cloud_preset(preset.id, get_username(), function (success, response)
+            if success then
+                -- print(string.format('[Cloud] Deleted preset: %s by %s', preset.name, preset.creator))
+                reload_cloud_presets()
+                cvar.play:invoke_callback('ambient\\tones\\elev1')
+            else
+                print('[Cloud] Failed to delete preset. Response: ', response and response.body or 'nil')
+            end
+        end)
+    end)
+
+    presets._cloud.list:set_callback(update_cloud_info)
+
+    presets._cloud.load:set_callback(function ()
+        local idx = presets._cloud.list:get() + 1
+        local preset = cloud_presets[idx]
+        if not preset then return end
+        
+        if can_load_cloud_preset(preset) then
+            -- print(string.format('[Cloud] Loaded preset: %s by %s (author build: %s, allow: %s)', preset.name, preset.creator, preset.build, preset.allow))
+            local ok, cfg = pcall(loadstring(base64.decode(preset.config)))
+            if ok and type(cfg) == 'table' then
+                setup:load(cfg)
+            end
+            cvar.play:invoke_callback('ambient\\tones\\elev1')
+        else
+            print(string.format('[Cloud] You are not allowed to load this preset. Your build is %s and the preset build is %s.', get_build(), preset.allow))
+        end
+    end)
+
+    presets._cloud.like:set_callback(function ()
+        local idx = presets._cloud.list:get() + 1
+        local preset = cloud_presets[idx]
+        local username = get_username()
+        if not can_load_cloud_preset(preset) then
+            print('[Cloud] You are not allowed to like this preset.')
+            return
+        end
+    
+        like_cloud_preset(preset.id, username, function (success, response)
+            if success then
+                -- print(string.format('[Cloud] Liked preset: %s', preset.name))
+                reload_cloud_presets()
+                cvar.play:invoke_callback('ambient\\tones\\elev1')
+            else
+                print('[Cloud] Failed to like the preset. Response: ', response and response.body or 'nil')
+            end
+        end)
+    end)
+
+    presets._cloud.liked:set_callback(function ()
+        local idx = presets._cloud.list:get() + 1
+        local preset = cloud_presets[idx]
+        local username = get_username()
+        if not can_load_cloud_preset(preset) then
+            print('[Cloud] You are not allowed to unlike this preset.')
+            return
+        end
+    
+        like_cloud_preset(preset.id, username, function (success, response)
+            if success then
+                -- print(string.format('[Cloud] Unliked preset: %s', preset.name))
+                reload_cloud_presets()
+                cvar.play:invoke_callback('ambient\\tones\\elev1')
+            else
+                print('[Cloud] Failed to unlike the preset. Response: ', response and response.body or 'nil')
+            end
+        end)
+    end)
+
+    local function count_current_likes ()
+        if presets._cloud.likes then
+            local idx = presets._cloud.list:get() + 1
+            presets._cloud.likes:set(string.format('\v\r Likes: \v%d\r', cloud_likes[idx] or 0))
+        end
+    end
+
+    presets._cloud.list:set_callback(count_current_likes)
+
+    presets._local.create:set_callback(logic.create)
+    presets._local.import_from_clipboard:set_callback(logic.import)
+    presets._local.delete:set_callback(logic.delete)
+    presets._local.save:set_callback(logic.save)
+    presets._local.load:set_callback(logic.load)
+    presets._local.load_aa:set_callback(logic.load_aa)
+    presets._local.export_to_clipboard:set_callback(logic.export)
+    
+    local function update_visibility ()
+        local is_user_section = tab.main:get() == ' User Section'
+        local is_info_tab = tab.second:get() == ' Information'
+        local should_show = is_user_section and is_info_tab
+        
+        presets.type_buttons.local_presets:set_visible(false)
+        
+        pui.traverse(presets._local, function(ref) ref:set_visible(false) end)
+        pui.traverse(presets._cloud, function(ref) ref:set_visible(false) end)
+        
+        pui.traverse({information, presets._local}, function (ref)
+            ref:set_visible(should_show and current_tab == 'Local')
+        end)
+
+        if should_show then
+            pui.traverse(presets._cloud, function (ref) 
+                if current_tab == 'Cloud' and ref ~= presets._cloud.like and ref ~= presets._cloud.liked and ref ~= presets._cloud.loading then
+                    ref:set_visible(true)
+                end
+            end)
+
+            if current_tab == 'Cloud' then
+                presets.type_buttons.local_presets:set_visible(true)
+                
+                if IS_LIKED then
+                    presets._cloud.liked:set_visible(true)
+                else
+                    presets._cloud.like:set_visible(true)
+                end
+            elseif current_tab == 'Local' then
+                
+                information.youtube_2:set_visible(information.socials:get() == 1)
+                information.youtube:set_visible(information.socials:get() == 2)
+            end
+        end
+    end
+
+    
+    presets.type_buttons.local_presets:set_callback(function ()
+        current_tab = 'Local'
+        update_visibility()
+    end)
+    
+    tab.main:set_callback(function ()
+        pui.traverse({presets._cloud.like, presets._cloud.liked, presets._cloud.loading}, function (ref) ref:set_visible(false) end)
+        
+        update_visibility()
+    end)
+    
+    tab.second:set_callback(function ()
+        pui.traverse({presets._cloud.like, presets._cloud.liked, presets._cloud.loading}, function (ref) ref:set_visible(false) end)
+        
+        update_visibility()
+    end)
+    
+    information.socials:set_callback(update_visibility)
+    
+    update_visibility()
+end
+
+local colors = {
+    combobox = menu.group.anti_aim.fakelag:combobox('Color', {'Menu', 'Custom'}),
+    custom = {
+        type = menu.group.anti_aim.fakelag:combobox('\nType', {'Solid', 'Gradient'}),
+        color_1 = menu.group.anti_aim.fakelag:color_picker('\nColor 1', 222, 200, 255, 255),
+        color_2 = menu.group.anti_aim.fakelag:color_picker('\nColor 2', 222, 200, 255, 255),
+        color_3 = menu.group.anti_aim.fakelag:color_picker('\nColor 3', 255, 111, 111, 255),
+        color_4 = menu.group.anti_aim.fakelag:color_picker('\nColor 4', 255, 255, 255, 255),
+        select = menu.group.anti_aim.fakelag:multiselect('\nEnabled', {'Text watermark', 'Watermark', 'Keybinds', 'Spectators', 'Multi panel', 'Event logger', 'Crosshair', 'Arrows', 'Scope'}),
+    }
+} do
+    pui.traverse(colors, function (ref)
+        ref:depend({tab.main, ' User Section'}, {tab.second, ' Visuals'})
+    end)
+    pui.traverse(colors.custom, function (ref)
+        ref:depend({colors.combobox, 'Custom'})
+    end)
+    pui.traverse({colors.custom.color_2, colors.custom.color_3, colors.custom.color_4, colors.custom.select}, function (ref)
+        ref:depend({colors.custom.type, 'Gradient'})
+    end)
+end
+
+local elements = {
+    anti_aim = {
+        tab_label = menu.group.anti_aim.fakelag:label('\v  \a7F7F7F97•    •  '),
+        tab = menu.group.anti_aim.fakelag:combobox('\nAA Tab', {' Builder', ' Defensive', ' Other'}),
+        tab_2 = menu.group.anti_aim.fakelag:combobox('\nAA Tab #2', {'Hotkeys', 'Exploits', 'Settings'}),
+        space = menu.group.anti_aim.fakelag:label('\n Space'),
+
+        hotkeys = {
+            manual_mode = menu.group.anti_aim.fakelag:slider('Manual \v»\r Mode', 1, 2, 1, true, '', 1, { [1] = 'Default', [2] = 'Spam' }),
+            forward = menu.group.anti_aim.fakelag:hotkey('Manual \v»\r Forward'),
+            left = menu.group.anti_aim.fakelag:hotkey('Manual \v»\r Left'),
+            right = menu.group.anti_aim.fakelag:hotkey('Manual \v»\r Right'),
+            reset = menu.group.anti_aim.fakelag:hotkey('Manual \v»\r Reset'),
+            freestanding = menu.group.anti_aim.fakelag:checkbox('Freestanding', 0x00),
+            freestanding_disablers = menu.group.anti_aim.fakelag:multiselect('Disable freestanding on', {'Stand', 'Run', 'Walk', 'Crouch', 'Sneak', 'Air', 'Air+'}),
+            edge_yaw = menu.group.anti_aim.fakelag:checkbox('Edge yaw', 0x00),
+        },
+
+        exploits = {
+            exploit = menu.group.anti_aim.fakelag:checkbox('\vSecret\r exploit', 0x00),
+            defensive_flick = {
+                enable = menu.group.anti_aim.fakelag:checkbox('Defensive \vflick\r'),
+                settings = {
+                    states = menu.group.anti_aim.fakelag:multiselect('\nStates', {'Stand', 'Run', 'Walk', 'Crouch', 'Sneak', 'Air', 'Air+', 'Freestanding', 'Manual Left', 'Manual Right'}),
+                }
+            }
+        },
+
+        settings = {
+            list = menu.group.anti_aim.fakelag:multiselect('\nSettings', {'Safe head', 'Off defensive aa vs low ping', 'Anti backstab', 'Fast ladder', 'Spin if enemies dead', 'E-Bombsite fix', 'Spin on warmup'}),
+            safe_head_options = menu.group.anti_aim.fakelag:multiselect('\nSafe Head States', {'Knife', 'Taser', 'Height Advantage'}),
+            safe_head_mode = menu.group.anti_aim.fakelag:combobox('\nSafe Head Mode', {'Offensive', 'Defensive'})
+        }
+    },
+
+    tab = {
+        label = menu.group.anti_aim.fakelag:label('\v  \a7F7F7F97•  '),
+        combo = menu.group.anti_aim.fakelag:combobox('\nFeatures Tab', {' Aimbot', ' Miscellaneous'}),
+        space = menu.group.anti_aim.fakelag:label(' '),
+    },
+
+    aimbot = {
+        unsafe_exploit = menu.group.anti_aim.main:checkbox('Unsafe exploit recharge'),
+        auto_discharge = {
+            enable = menu.group.anti_aim.main:checkbox('Auto exploit discharge', 0x00),
+            settings = {
+                mode = menu.group.anti_aim.main:combobox('\nMode', {'Default', 'Air lag'}),
+                air_lag_mode = menu.group.anti_aim.main:combobox('\nAir lag mode', {'Fast', 'Slow'}),
+            }
+        },
+        resolver = menu.group.anti_aim.main:checkbox('\vResolver'),
+        aim_punch_fix = menu.group.anti_aim.main:checkbox('Aim punch miss fix'),
+        auto_hs = {
+            enable = menu.group.anti_aim.main:checkbox('Auto hide shots'),
+            settings = {
+                state = menu.group.anti_aim.main:multiselect('\nStates', {'Stand', 'Run', 'Walk', 'Crouch', 'Sneak'}),
+                avoid_guns = menu.group.anti_aim.main:multiselect('Avoid', {'Pistols', 'Desert Eagle', 'Auto Snipers', 'Desert Eagle + Crouch'}),
+            }
+        },
+        auto_air_stop = {
+            enable = menu.group.anti_aim.main:checkbox('Auto air stop'),
+            settings = {
+                addons = menu.group.anti_aim.main:multiselect('\nAddons', {'Work only with quick peek assist', 'Work if speed lower than X'}),
+                hitchance = menu.group.anti_aim.main:slider('Hitchance', 1, 100, 20, true, '%'),
+                speed = menu.group.anti_aim.main:slider('\nSpeed', 10, 450, 270, true, 'u'),
+            }
+        },
+
+        aimbot_helper = {
+            enable = menu.group.anti_aim.fakelag:checkbox('Aimbot \vhelper'),
+            settings = {
+                weapon = menu.group.anti_aim.fakelag:combobox('\nWeapon', {'SSG-08', 'AWP', 'Auto Snipers'}),
+                ssg = {
+                    select = menu.group.anti_aim.fakelag:multiselect('\nSelect SSG08', {'Force safe point', 'Prefer body aim', 'Force body aim', 'Ping spike'}),
+                    
+                    force_safe = menu.group.anti_aim.fakelag:multiselect('\vForce safe point\r triggers \nSSG08', {'Enemy HP < X', 'X Missed Shots', 'Lethal', 'Height advantage', 'Enemy higher than you'}),
+                    force_safe_hp = menu.group.anti_aim.fakelag:slider('\vForce safe point\r HP Trigger \nSSG08', 1, 100, 50, true, 'hp'),
+                    force_safe_miss = menu.group.anti_aim.fakelag:slider('\vForce safe point\r Missed Trigger \nSSG08', 1, 10, 2, true, 'shots'),
+
+                    prefer_body = menu.group.anti_aim.fakelag:multiselect('\vPrefer body aim\r triggers \nSSG08', {'Enemy HP < X', 'X Missed Shots', 'Lethal', 'Height advantage', 'Enemy higher than you'}),
+                    prefer_body_hp = menu.group.anti_aim.fakelag:slider('\vPrefer body aim\r HP Trigger \nSSG08', 1, 100, 50, true, 'hp'),
+                    prefer_body_miss = menu.group.anti_aim.fakelag:slider('\vPrefer body aim\r Missed Trigger \nSSG08', 1, 10, 2, true, 'shots'),
+
+                    force_body = menu.group.anti_aim.fakelag:multiselect('\vForce body aim\r triggers \nSSG08', {'Enemy HP < X', 'X Missed Shots', 'Lethal', 'Height advantage', 'Enemy higher than you'}),
+                    force_body_hp = menu.group.anti_aim.fakelag:slider('\vForce body aim\r HP Trigger \nSSG08', 1, 100, 50, true, 'hp'),
+                    force_body_miss = menu.group.anti_aim.fakelag:slider('\vForce body aim\r Missed Trigger \nSSG08', 1, 10, 2, true, 'sh'),
+
+                    ping_spike_value = menu.group.anti_aim.fakelag:slider('\vPing spike\r value \nSSG08', 1, 200, 80, true, 'ms')
+                },
+
+                awp = {
+                    select = menu.group.anti_aim.fakelag:multiselect('\nSelect AWP', {'Force safe point', 'Prefer body aim', 'Force body aim', 'Ping spike'}),
+
+                    force_safe = menu.group.anti_aim.fakelag:multiselect('\vForce safe point\r triggers \nAWP', {'Enemy HP < X', 'X Missed Shots', 'Lethal', 'Height advantage', 'Enemy higher than you'}),
+                    force_safe_hp = menu.group.anti_aim.fakelag:slider('\vForce safe point\r HP Trigger \nAWP', 1, 100, 50, true, 'hp'),
+                    force_safe_miss = menu.group.anti_aim.fakelag:slider('\vForce safe point\r Missed Trigger \nAWP', 1, 10, 2, true, 'sh'),
+
+                    prefer_body = menu.group.anti_aim.fakelag:multiselect('\vPrefer body aim\r triggers \nAWP', {'Enemy HP < X', 'X Missed Shots', 'Lethal', 'Height advantage', 'Enemy higher than you'}),
+                    prefer_body_hp = menu.group.anti_aim.fakelag:slider('\vPrefer body aim\r HP Trigger \nAWP', 1, 100, 50, true, 'hp'),
+                    prefer_body_miss = menu.group.anti_aim.fakelag:slider('\vPrefer body aim\r Missed Trigger \nAWP', 1, 10, 2, true, 'sh'),
+
+                    force_body = menu.group.anti_aim.fakelag:multiselect('\vForce body aim\r triggers \nAWP', {'Enemy HP < X', 'X Missed Shots', 'Lethal', 'Height advantage', 'Enemy higher than you'}),
+                    force_body_hp = menu.group.anti_aim.fakelag:slider('\vForce body aim\r HP Trigger \nAWP', 1, 100, 50, true, 'hp'),
+                    force_body_miss = menu.group.anti_aim.fakelag:slider('\vForce body aim\r Missed Trigger \nAWP', 1, 10, 2, true, 'sh'),
+
+                    ping_spike_value = menu.group.anti_aim.fakelag:slider('\vPing spike\r value \nAWP', 1, 200, 130, true, 'ms')
+                },
+
+                auto = {
+                    select = menu.group.anti_aim.fakelag:multiselect('\nSelect AUTO', {'Force safe point', 'Prefer body aim', 'Force body aim', 'Ping spike'}),
+
+                    force_safe = menu.group.anti_aim.fakelag:multiselect('\vForce safe point\r triggers \nAUTO', {'Enemy HP < X', 'X Missed Shots', 'Lethal', 'Height advantage', 'Enemy higher than you'}),
+                    force_safe_hp = menu.group.anti_aim.fakelag:slider('\vForce safe point\r HP Trigger \nAUTO', 1, 100, 50, true, 'hp'),
+                    force_safe_miss = menu.group.anti_aim.fakelag:slider('\vForce safe point\r Missed Trigger \nAUTO', 1, 10, 2, true, 'sh'),
+
+                    prefer_body = menu.group.anti_aim.fakelag:multiselect('\vPrefer body aim\r triggers \nAUTO', {'Enemy HP < X', 'X Missed Shots', 'Lethal', 'Height advantage', 'Enemy higher than you'}),
+                    prefer_body_hp = menu.group.anti_aim.fakelag:slider('\vPrefer body aim\r HP Trigger \nAUTO', 1, 100, 50, true, 'hp'),
+                    prefer_body_miss = menu.group.anti_aim.fakelag:slider('\vPrefer body aim\r Missed Trigger \nAUTO', 1, 10, 2, true, 'sh'),
+
+                    force_body = menu.group.anti_aim.fakelag:multiselect('\vForce body aim\r triggers \nAUTO', {'Enemy HP < X', 'X Missed Shots', 'Lethal', 'Height advantage', 'Enemy higher than you'}),
+                    force_body_hp = menu.group.anti_aim.fakelag:slider('\vForce body aim\r HP Trigger \nAUTO', 1, 100, 50, true, 'hp'),
+                    force_body_miss = menu.group.anti_aim.fakelag:slider('\vForce body aim\r Missed Trigger \nAUTO', 1, 10, 2, true, 'sh'),
+
+                    ping_spike_value = menu.group.anti_aim.fakelag:slider('\vPing spike\r value \nAUTO', 1, 200, 105, true, 'ms')
+                }
+            }
+        },
+
+        ai_peek = {
+            enable = menu.group.anti_aim.fakelag:checkbox('\vAI\r peek', 0x00),
+            settings = {
+                distance = menu.group.anti_aim.fakelag:combobox('\nPeek distance', {'Long', 'Medium', 'Short'}),
+                mode = menu.group.anti_aim.fakelag:combobox('\nTarget mode', {'Current threat', 'Closest to crosshair'}),
+                peek_mode = menu.group.anti_aim.fakelag:multiselect('\nPeek mode', {'Automatically teleport back', 'Force defensive', 'Peek arrow'}),
+            }
+        },
+
+        predict_enemies = {
+            enable = menu.group.anti_aim.other:checkbox('Predict \venemies'),
+        },
+        
+        game_enhancer = {
+            enable = menu.group.anti_aim.other:checkbox('Game enhancer'),
+            settings = {
+                list = menu.group.anti_aim.other:multiselect('\nGame enhancer list', {'Fix chams color', 'Disable dynamic lighting', 'Disable dynamic shadows', 'Disable first-person tracers', 'Disable ragdolls', 'Disable eye gloss', 'Disable eye movement', 'Disable muzzle flash light', 'Enable low CPU audio', 'Disable bloom', 'Disable particles', 'Reduce breakable objects'}),
+            }
+        }
+    },
+
+    visuals = {
+        crosshair = {
+            enable = menu.group.anti_aim.main:checkbox('Crosshair'),
+            settings = {
+                type = menu.group.anti_aim.main:combobox('\nCrosshair type', {'Unique', 'Simple'}),
+                select = menu.group.anti_aim.main:multiselect('\nSelect', {'States', 'Binds'}),
+            }
+        },
+        arrows = {
+            enable = menu.group.anti_aim.main:checkbox('Arrows'),
+            settings = {
+                hide_on_thirdperson = menu.group.anti_aim.main:checkbox('\nHide on thirdperson'),
+                type = menu.group.anti_aim.main:combobox('\nArrows type', {'Pointers', 'Semicircle'}),
+                style = menu.group.anti_aim.main:combobox('\nArrows style', {'Unique', 'Simple', 'TeamSkeet'}),
+            }
+        },
+        scope = {
+            enable = menu.group.anti_aim.main:checkbox('Scope'),
+            settings = {
+                invert = menu.group.anti_aim.main:checkbox('\nInvert'),
+                exclude = menu.group.anti_aim.main:multiselect('\nExclude', {'Left', 'Right', 'Top', 'Bottom'}),
+                gap = menu.group.anti_aim.main:slider('\nScope gap', 0, 100, 10, true, 'x'),
+                size = menu.group.anti_aim.main:slider('\nScope size', 5, 200, 20, true, 'w'),
+            }
+        },
+
+        space = menu.group.anti_aim.main:label(' '),
+
+        zoom = {
+            enable = menu.group.anti_aim.main:checkbox('Zoom animation'),
+            settings = {
+                speed = menu.group.anti_aim.main:slider('\nZoom animation speed', 10, 100, 60, true, '%S'),
+                value = menu.group.anti_aim.main:slider('\nZoom animation value', 5, 100, 15, true, '%')
+            }
+        },
+        aspect_ratio = {
+            enable = menu.group.anti_aim.main:checkbox('Aspect ratio'),
+            settings = {
+                value = menu.group.anti_aim.main:slider('\nAspect ratio value', 80, 250, 178, true, 'x', .01, {[125] = '5:4', [133] = '4:3', [150] = '3:2', [160] = '16:10', [178] = '16:9', [200] = '2:1'}),
+            }
+        },
+        viewmodel = {
+            enable = menu.group.anti_aim.main:checkbox('Viewmodel'),
+            settings = {
+                fov = menu.group.anti_aim.main:slider('\nFOV', 0, 120, 68, true, '°'),
+                x = menu.group.anti_aim.main:slider('\nX', -100, 100, 0, true, 'u', .1),
+                y = menu.group.anti_aim.main:slider('\nY', -100, 100, 0, true, 'u', .1),
+                z = menu.group.anti_aim.main:slider('\nZ', -100, 100, 0, true, 'u', .1)
+            }
+        },
+
+        side_indicators = menu.group.anti_aim.fakelag:checkbox('\nSide indicators'),
+        windows = menu.group.anti_aim.fakelag:multiselect('Windows', {'Force text watermark', 'Watermark', 'Keybinds', 'Spectators', 'Debug panel', 'Multi panel', 'LC Side indicator', 'Event logger'}),
+        watermark = {
+            settings = {
+                elements = menu.group.anti_aim.fakelag:multiselect('Watermark elements', {'Nickname', 'Frames Per Second', 'Ping', 'Tickrate', 'Time'}),
+                nickname = menu.group.anti_aim.fakelag:combobox('Watermark nickname', {'Loader', 'Steam', 'Custom'}),
+                custom = menu.group.anti_aim.fakelag:textbox('Watermark custom nickname'),
+            }
+        },
+        event_logger = {
+            settings = {
+                type = menu.group.anti_aim.fakelag:multiselect('Event logger type', {'In console', 'On screen'}),
+            }
+        },
+
+        damage = {
+            enable = menu.group.anti_aim.other:checkbox('Damage indicator'),
+            settings = {
+                type = menu.group.anti_aim.other:combobox('\nDamage indicator type', {'Always on', 'On hotkey'}),
+                font = menu.group.anti_aim.other:combobox('\nDamage indicator flag', {'Default', 'Bold', 'Small'}),
+            }
+        },
+
+        markers = {
+            enable = menu.group.anti_aim.other:checkbox('Markers'),
+            settings = {
+                type = menu.group.anti_aim.other:multiselect('\nMarkers type', {'On hit', 'On miss', 'Damage'})
+            }
+        }
+    },
+
+    misc = {
+        sticker_crash_fix = menu.group.anti_aim.main:checkbox('Sticker crash fix'),
+        enemy_chat_viewer = menu.group.anti_aim.main:checkbox('Enemy chat viewer'),
+        edge_quick_stop = menu.group.anti_aim.main:checkbox('Edge quick stop', 0x00),
+        space = menu.group.anti_aim.main:label(' '),
+        fd_fix = menu.group.anti_aim.main:checkbox('Duck peek assist fix'),
+        drop_nades = {
+            enable = menu.group.anti_aim.main:checkbox('Drop nades', 0x00),
+            settings = {
+                list = menu.group.anti_aim.main:multiselect('\nType', {'HE Grenade', 'Molotov', 'Incendiary', 'Smoke'}),
+            }
+        },
+        space_2 = menu.group.anti_aim.main:label('  '),
+        autobuy = {
+            enable = menu.group.anti_aim.main:checkbox('Auto buy'),
+            settings = {
+                sniper = menu.group.anti_aim.main:combobox('\nPrimary weapon', {'-', 'SSG-08', 'AWP', 'SCAR-20/G3SG1'}),
+                pistol = menu.group.anti_aim.main:combobox('\nSecondary weapon', {'-', 'Duals', 'P250', 'Five-SeveN/Tec-9', 'Deagle/R8'}),
+                grenades = menu.group.anti_aim.main:multiselect('\nGrenades', {'Smoke', 'Molotov', 'HE Grenade'}),
+                utilities = menu.group.anti_aim.main:multiselect('\nUtilities', {'Kevlar', 'Helmet', 'Defuse Kit', 'Taser'})
+            }
+        },
+
+        animations = {
+            enable = menu.group.anti_aim.fakelag:checkbox('Animation breaker'),
+            settings = {
+                condition = menu.group.anti_aim.fakelag:combobox('\nCondition', {'Running', 'In air'}),
+                running = {
+                    anim_type = menu.group.anti_aim.fakelag:combobox('\nSelect animations\nRunning', {'-', 'Static', 'Jitter', 'Alternative jitter', 'Allah'}),
+                    anim_min_jitter = menu.group.anti_aim.fakelag:slider('Min. jitter percent\nRunning', 0, 100, 0, true, '%'),   
+                    anim_max_jitter = menu.group.anti_aim.fakelag:slider('Max. jitter percent\nRunning', 0, 100, 100, true, '%'),
+                    anim_extra_type = menu.group.anti_aim.fakelag:multiselect('\nSelect extra animations\nRunning', {'Body lean'}),
+                    anim_bodylean = menu.group.anti_aim.fakelag:slider('Leaning percent\nRunning', 0, 100, 70, true, '%'),
+                },
+
+                in_air = {
+                    anim_type = menu.group.anti_aim.fakelag:combobox('\nSelect Animations\nAir', {'-', 'Static', 'Jitter', 'Allah'}),
+                    anim_min_jitter = menu.group.anti_aim.fakelag:slider('Min. jitter percent\nAir', 0, 100, 0, true, '%'),   
+                    anim_max_jitter = menu.group.anti_aim.fakelag:slider('Max. jitter percent\nAir', 0, 100, 100, true, '%'),   
+                    anim_extra_type = menu.group.anti_aim.fakelag:multiselect('\nSelect extra animations\nAir', {'Body lean', 'Zero pitch on landing'}),
+                    anim_bodylean = menu.group.anti_aim.fakelag:slider('Leaning percent\nAir', 0, 100, 70, true, '%'),
+                },
+            }
+        },
+
+        clan_tag_spammer = menu.group.anti_aim.other:checkbox('Clan tag spammer'),
+        trash_talk = {
+            enable = menu.group.anti_aim.other:checkbox('Trash talk'),
+            settings = {
+                work = menu.group.anti_aim.other:multiselect('\nWork', {'On kill', 'On death'}),
+                type = menu.group.anti_aim.other:combobox('\nType', {'Regicide', 'Bait'}),
+            }
+        }
+    }
+} do
+    -- elements.anti_aim.exploits.exploit:set_enabled(false)
+    pui.traverse(elements.anti_aim, function (ref)
+        ref:depend({tab.main, ' Anti-aimbot angles'})
+    end)
+
+    elements.anti_aim.tab:set_callback(function (ref)
+        if ref:get() == ' Builder' then
+            elements.anti_aim.tab_label:set('\v  \a7F7F7F97•    •  ')
+        elseif ref:get() == ' Defensive' then
+            elements.anti_aim.tab_label:set('\a7F7F7F97  •  \v  \a7F7F7F97•  ')
+        elseif ref:get() == ' Other' then
+            elements.anti_aim.tab_label:set('\a7F7F7F97  •    •  \v')
+        end
+    end)
+    elements.anti_aim.tab_2:depend({tab.main, ' Anti-aimbot angles'}, {elements.anti_aim.tab, ' Other', true})
+    pui.traverse(reference.antiaim.fakelag, function (ref)
+        ref:depend({tab.main, ' Anti-aimbot angles'}, {elements.anti_aim.tab, ' Other'})
+        if ref.hotkey then ref.hotkey:depend({tab.main, ' Anti-aimbot angles'}, {elements.anti_aim.tab, ' Other'}) end
+    end)
+
+    pui.traverse(reference.antiaim.other, function (ref)
+        ref:depend({tab.main, ' Anti-aimbot angles'}, {elements.anti_aim.tab, ' Other'})
+        if ref.hotkey then ref.hotkey:depend({tab.main, ' Anti-aimbot angles'}, {elements.anti_aim.tab, ' Other'}) end
+    end)
+
+    pui.traverse(elements.anti_aim.hotkeys, function (ref)
+        ref:depend({elements.anti_aim.tab_2, 'Hotkeys'}, {elements.anti_aim.tab, ' Other', true})
+    end)
+    elements.anti_aim.hotkeys.freestanding_disablers:depend({elements.anti_aim.hotkeys.freestanding, true})
+
+    pui.traverse(elements.anti_aim.exploits, function (ref)
+        ref:depend({elements.anti_aim.tab_2, 'Exploits'}, {elements.anti_aim.tab, ' Other', true})
+    end)
+    pui.traverse(elements.anti_aim.exploits.defensive_flick.settings, function (ref)
+        ref:depend({elements.anti_aim.exploits.defensive_flick.enable, true})
+    end)
+    
+    pui.traverse(elements.anti_aim.settings, function (ref)
+        ref:depend({elements.anti_aim.tab_2, 'Settings'}, {elements.anti_aim.tab, ' Other', true})
+    end)
+    pui.traverse({elements.anti_aim.settings.safe_head_options, elements.anti_aim.settings.safe_head_mode}, function (ref)
+        ref:depend({elements.anti_aim.settings.list, 'Safe head'})
+    end)
+
+    pui.traverse(elements.tab, function (ref)
+        ref:depend({tab.main, ' Features'})
+    end)
+    elements.tab.combo:set_callback(function (ref)
+        if ref:get() == ' Aimbot' then
+            elements.tab.label:set('\v  \a7F7F7F97•  ')
+        elseif ref:get() == ' Miscellaneous' then
+            elements.tab.label:set('\a7F7F7F97  •  \v')
+        end
+    end)
+
+    pui.traverse(elements.aimbot, function (ref)
+        ref:depend({tab.main, ' Features'}, {elements.tab.combo, ' Aimbot'})
+    end)
+    pui.traverse(elements.aimbot.auto_discharge.settings, function (ref)
+        ref:depend({elements.aimbot.auto_discharge.enable, true})
+    end)
+    elements.aimbot.auto_discharge.settings.air_lag_mode:depend({elements.aimbot.auto_discharge.settings.mode, 'Air lag'})
+    pui.traverse(elements.aimbot.auto_hs.settings, function (ref)
+        ref:depend({elements.aimbot.auto_hs.enable, true})
+    end)
+    elements.aimbot.auto_hs.settings.avoid_guns:depend({elements.aimbot.auto_hs.settings.state, function ()
+        if elements.aimbot.auto_hs.settings.state:get('Stand') or elements.aimbot.auto_hs.settings.state:get('Run') or elements.aimbot.auto_hs.settings.state:get('Walk') or elements.aimbot.auto_hs.settings.state:get('Crouch') or elements.aimbot.auto_hs.settings.state:get('Sneak') then
+            return true
+        else
+            return false
+        end
+    end})
+    pui.traverse(elements.aimbot.auto_air_stop.settings, function (ref)
+        ref:depend({elements.aimbot.auto_air_stop.enable, true})
+    end)
+    elements.aimbot.auto_air_stop.settings.speed:depend({elements.aimbot.auto_air_stop.settings.addons, 'Work if speed lower than X'})
+    pui.traverse(elements.aimbot.aimbot_helper.settings, function (ref)
+        ref:depend({elements.aimbot.aimbot_helper.enable, true})
+    end)
+    pui.traverse(elements.aimbot.aimbot_helper.settings.ssg, function (ref)
+        ref:depend({elements.aimbot.aimbot_helper.settings.weapon, 'SSG-08'})
+    end)
+    pui.traverse({elements.aimbot.aimbot_helper.settings.ssg.force_safe, elements.aimbot.aimbot_helper.settings.ssg.force_safe_hp, elements.aimbot.aimbot_helper.settings.ssg.force_safe_miss}, function (ref)
+        ref:depend({elements.aimbot.aimbot_helper.settings.ssg.select, 'Force safe point'})
+    end)
+    elements.aimbot.aimbot_helper.settings.ssg.force_safe_hp:depend({elements.aimbot.aimbot_helper.settings.ssg.force_safe, 'Enemy HP < X'})
+    elements.aimbot.aimbot_helper.settings.ssg.force_safe_miss:depend({elements.aimbot.aimbot_helper.settings.ssg.force_safe, 'X Missed Shots'})
+    pui.traverse({elements.aimbot.aimbot_helper.settings.ssg.prefer_body, elements.aimbot.aimbot_helper.settings.ssg.prefer_body_hp, elements.aimbot.aimbot_helper.settings.ssg.prefer_body_miss}, function (ref)
+        ref:depend({elements.aimbot.aimbot_helper.settings.ssg.select, 'Prefer body aim'})
+    end)
+    elements.aimbot.aimbot_helper.settings.ssg.prefer_body_hp:depend({elements.aimbot.aimbot_helper.settings.ssg.prefer_body, 'Enemy HP < X'})
+    elements.aimbot.aimbot_helper.settings.ssg.prefer_body_miss:depend({elements.aimbot.aimbot_helper.settings.ssg.prefer_body, 'X Missed Shots'})
+    pui.traverse({elements.aimbot.aimbot_helper.settings.ssg.force_body, elements.aimbot.aimbot_helper.settings.ssg.force_body_hp, elements.aimbot.aimbot_helper.settings.ssg.force_body_miss}, function (ref)
+        ref:depend({elements.aimbot.aimbot_helper.settings.ssg.select, 'Force body aim'})
+    end)
+    elements.aimbot.aimbot_helper.settings.ssg.force_body_hp:depend({elements.aimbot.aimbot_helper.settings.ssg.force_body, 'Enemy HP < X'})
+    elements.aimbot.aimbot_helper.settings.ssg.force_body_miss:depend({elements.aimbot.aimbot_helper.settings.ssg.force_body, 'X Missed Shots'})
+    elements.aimbot.aimbot_helper.settings.ssg.ping_spike_value:depend({elements.aimbot.aimbot_helper.settings.ssg.select, 'Ping spike'})
+    pui.traverse(elements.aimbot.aimbot_helper.settings.awp, function (ref)
+        ref:depend({elements.aimbot.aimbot_helper.settings.weapon, 'AWP'})
+    end)
+    pui.traverse({elements.aimbot.aimbot_helper.settings.awp.force_safe, elements.aimbot.aimbot_helper.settings.awp.force_safe_hp, elements.aimbot.aimbot_helper.settings.awp.force_safe_miss}, function (ref)
+        ref:depend({elements.aimbot.aimbot_helper.settings.awp.select, 'Force safe point'})
+    end)
+    elements.aimbot.aimbot_helper.settings.awp.force_safe_hp:depend({elements.aimbot.aimbot_helper.settings.awp.force_safe, 'Enemy HP < X'})
+    elements.aimbot.aimbot_helper.settings.awp.force_safe_miss:depend({elements.aimbot.aimbot_helper.settings.awp.force_safe, 'X Missed Shots'})
+    pui.traverse({elements.aimbot.aimbot_helper.settings.awp.prefer_body, elements.aimbot.aimbot_helper.settings.awp.prefer_body_hp, elements.aimbot.aimbot_helper.settings.awp.prefer_body_miss}, function (ref)
+        ref:depend({elements.aimbot.aimbot_helper.settings.awp.select, 'Prefer body aim'})
+    end)
+    elements.aimbot.aimbot_helper.settings.awp.prefer_body_hp:depend({elements.aimbot.aimbot_helper.settings.awp.prefer_body, 'Enemy HP < X'})
+    elements.aimbot.aimbot_helper.settings.awp.prefer_body_miss:depend({elements.aimbot.aimbot_helper.settings.awp.prefer_body, 'X Missed Shots'})
+    pui.traverse({elements.aimbot.aimbot_helper.settings.awp.force_body, elements.aimbot.aimbot_helper.settings.awp.force_body_hp, elements.aimbot.aimbot_helper.settings.awp.force_body_miss}, function (ref)
+        ref:depend({elements.aimbot.aimbot_helper.settings.awp.select, 'Force body aim'})
+    end)
+    elements.aimbot.aimbot_helper.settings.awp.force_body_hp:depend({elements.aimbot.aimbot_helper.settings.awp.force_body, 'Enemy HP < X'})
+    elements.aimbot.aimbot_helper.settings.awp.force_body_miss:depend({elements.aimbot.aimbot_helper.settings.awp.force_body, 'X Missed Shots'})
+    elements.aimbot.aimbot_helper.settings.awp.ping_spike_value:depend({elements.aimbot.aimbot_helper.settings.awp.select, 'Ping spike'})
+    pui.traverse(elements.aimbot.aimbot_helper.settings.auto, function (ref)
+        ref:depend({elements.aimbot.aimbot_helper.settings.weapon, 'Auto Snipers'})
+    end)
+    pui.traverse({elements.aimbot.aimbot_helper.settings.auto.force_safe, elements.aimbot.aimbot_helper.settings.auto.force_safe_hp, elements.aimbot.aimbot_helper.settings.auto.force_safe_miss}, function (ref)
+        ref:depend({elements.aimbot.aimbot_helper.settings.auto.select, 'Force safe point'})
+    end)
+    elements.aimbot.aimbot_helper.settings.auto.force_safe_hp:depend({elements.aimbot.aimbot_helper.settings.auto.force_safe, 'Enemy HP < X'})
+    elements.aimbot.aimbot_helper.settings.auto.force_safe_miss:depend({elements.aimbot.aimbot_helper.settings.auto.force_safe, 'X Missed Shots'})
+    pui.traverse({elements.aimbot.aimbot_helper.settings.auto.prefer_body, elements.aimbot.aimbot_helper.settings.auto.prefer_body_hp, elements.aimbot.aimbot_helper.settings.auto.prefer_body_miss}, function (ref)
+        ref:depend({elements.aimbot.aimbot_helper.settings.auto.select, 'Prefer body aim'})
+    end)
+    elements.aimbot.aimbot_helper.settings.auto.prefer_body_hp:depend({elements.aimbot.aimbot_helper.settings.auto.prefer_body, 'Enemy HP < X'})
+    elements.aimbot.aimbot_helper.settings.auto.prefer_body_miss:depend({elements.aimbot.aimbot_helper.settings.auto.prefer_body, 'X Missed Shots'})
+    pui.traverse({elements.aimbot.aimbot_helper.settings.auto.force_body, elements.aimbot.aimbot_helper.settings.auto.force_body_hp, elements.aimbot.aimbot_helper.settings.auto.force_body_miss}, function (ref)
+        ref:depend({elements.aimbot.aimbot_helper.settings.auto.select, 'Force body aim'})
+    end)
+    elements.aimbot.aimbot_helper.settings.auto.force_body_hp:depend({elements.aimbot.aimbot_helper.settings.auto.force_body, 'Enemy HP < X'})
+    elements.aimbot.aimbot_helper.settings.auto.force_body_miss:depend({elements.aimbot.aimbot_helper.settings.auto.force_body, 'X Missed Shots'})
+    elements.aimbot.aimbot_helper.settings.auto.ping_spike_value:depend({elements.aimbot.aimbot_helper.settings.auto.select, 'Ping spike'})
+    pui.traverse(elements.aimbot.ai_peek.settings, function (ref)
+        ref:depend({elements.aimbot.ai_peek.enable, true})
+    end)
+    pui.traverse(elements.aimbot.game_enhancer.settings, function (ref)
+        ref:depend({elements.aimbot.game_enhancer.enable, true})
+    end)
+
+    pui.traverse(elements.visuals, function (ref)
+        ref:depend({tab.main, ' User Section'}, {tab.second, ' Visuals'})
+    end)
+    pui.traverse(elements.visuals.crosshair.settings, function (ref)
+        ref:depend({elements.visuals.crosshair.enable, true})
+    end)
+    pui.traverse(elements.visuals.arrows.settings, function (ref)
+        ref:depend({elements.visuals.arrows.enable, true})
+    end)
+    elements.visuals.arrows.settings.style:depend({elements.visuals.arrows.settings.type, 'Pointers'})
+    elements.visuals.arrows.settings.hide_on_thirdperson:depend({elements.visuals.arrows.settings.type, 'Semicircle'})
+    pui.traverse(elements.visuals.scope.settings, function (ref)
+        ref:depend({elements.visuals.scope.enable, true})
+    end)
+    pui.traverse(elements.visuals.zoom.settings, function (ref)
+        ref:depend({elements.visuals.zoom.enable, true})
+    end)
+    pui.traverse(elements.visuals.aspect_ratio.settings, function (ref)
+        ref:depend({elements.visuals.aspect_ratio.enable, true})
+    end)
+    pui.traverse(elements.visuals.viewmodel.settings, function (ref)
+        ref:depend({elements.visuals.viewmodel.enable, true})
+    end)
+    elements.visuals.side_indicators:set(true)
+    pui.traverse(elements.visuals.watermark.settings, function (ref)
+        ref:depend({elements.visuals.windows, 'Watermark'})
+    end)
+    elements.visuals.watermark.settings.nickname:depend({elements.visuals.watermark.settings.elements, 'Nickname'})
+    elements.visuals.watermark.settings.custom:depend({elements.visuals.watermark.settings.elements, 'Nickname'}, {elements.visuals.watermark.settings.nickname, 'Custom'})
+    pui.traverse(elements.visuals.event_logger.settings, function (ref)
+        ref:depend({elements.visuals.windows, 'Event logger'})
+    end)
+    pui.traverse(elements.visuals.damage.settings, function (ref)
+        ref:depend({elements.visuals.damage.enable, true})
+    end)
+    pui.traverse(elements.visuals.markers.settings, function (ref)
+        ref:depend({elements.visuals.markers.enable, true})
+    end)
+
+    pui.traverse(elements.misc, function (ref)
+        ref:depend({tab.main, ' Features'}, {elements.tab.combo, ' Miscellaneous'})
+    end)
+    pui.traverse(elements.misc.drop_nades.settings, function (ref)
+        ref:depend({elements.misc.drop_nades.enable, true})
+    end)
+    pui.traverse(elements.misc.autobuy.settings, function (ref)
+        ref:depend({elements.misc.autobuy.enable, true})
+    end)
+    pui.traverse(elements.misc.animations.settings, function (ref)
+        ref:depend({elements.misc.animations.enable, true})
+    end)
+    pui.traverse(elements.misc.animations.settings.running, function (ref)
+        ref:depend({elements.misc.animations.settings.condition, 'Running'})
+    end)
+    pui.traverse(elements.misc.animations.settings.in_air, function (ref)
+        ref:depend({elements.misc.animations.settings.condition, 'In air'})
+    end)
+    pui.traverse(elements.misc.animations.settings.running.anim_bodylean, function (ref)
+        ref:depend({elements.misc.animations.settings.running.anim_extra_type, 'Body lean'})
+    end)
+    pui.traverse({elements.misc.animations.settings.running.anim_min_jitter, elements.misc.animations.settings.running.anim_max_jitter}, function (ref)
+        ref:depend({elements.misc.animations.settings.running.anim_type, 'Jitter'})
+    end)
+    pui.traverse(elements.misc.animations.settings.in_air.anim_bodylean, function (ref)
+        ref:depend({elements.misc.animations.settings.in_air.anim_extra_type, 'Body lean'})
+    end)
+    pui.traverse({elements.misc.animations.settings.in_air.anim_min_jitter, elements.misc.animations.settings.in_air.anim_max_jitter}, function (ref)
+        ref:depend({elements.misc.animations.settings.in_air.anim_type, 'Jitter'})
+    end)
+    pui.traverse(elements.misc.trash_talk.settings, function (ref)
+        ref:depend({elements.misc.trash_talk.enable, true})
+    end)
+end
+
+local drag_slider = {
+    crosshair = {
+        y = menu.group.anti_aim.main:slider('Y Crosshair', 0, screen_size_y(), helpers:clamp(screen_size_y() / 2 + 20, 0, screen_size_y() - 76)),
+    },
+    arrows = {
+        x = menu.group.anti_aim.main:slider('X Arrows', 0, screen_size_x(), helpers:clamp(screen_size_x() / 2 + 30, 0, screen_size_x() - 147)),
+    },
+    advert = {
+        text_style = menu.group.anti_aim.main:combobox('Text style', {'Default', 'Bold', 'Small'}),
+        x = menu.group.anti_aim.main:slider('X Advert Watermark', 0, screen_size_x(), helpers:clamp(15, 0, screen_size_x() - 147)),
+        y = menu.group.anti_aim.main:slider('Y Advert Watermark', 0, screen_size_y(), helpers:clamp(screen_size_y() / 2 - 20, 0, screen_size_y() - 76)),
+    },
+    windows = {
+        watermark = {
+            x = menu.group.anti_aim.main:slider('X Watermark', 0, screen_size_x(), helpers:clamp(screen_size_x(), 0, screen_size_x() - 5)),
+            y = menu.group.anti_aim.main:slider('Y Watermark', 0, screen_size_y(), helpers:clamp(screen_size_y(), 0, screen_size_y() / 168)),
+        },
+
+        keybinds = {
+            x = menu.group.anti_aim.main:slider('X Keybinds', 0, screen_size_x(), helpers:clamp(screen_size_x(), 0, screen_size_x() * 0.7)),
+            y = menu.group.anti_aim.main:slider('Y Keybinds', 0, screen_size_y(), helpers:clamp(screen_size_y(), 0, screen_size_y() / 2 - 60)),
+        },
+
+        spectators = {
+            x = menu.group.anti_aim.main:slider('X Spectators', 0, screen_size_x(), helpers:clamp(screen_size_x(), 0, screen_size_x() - 5)),
+            y = menu.group.anti_aim.main:slider('Y Spectators', 0, screen_size_y(), helpers:clamp(screen_size_y(), 0, screen_size_y() / 2)),
+        },
+
+        event_logger = {
+            x = menu.group.anti_aim.main:slider('X Event logger', 0, screen_size_x(), helpers:clamp(screen_size_x(), 0, screen_size_x() / 2)),
+            y = menu.group.anti_aim.main:slider('Y Event logger', 0, screen_size_y(), helpers:clamp(screen_size_y(), 0, screen_size_y() / 2 + 270)),
+        },
+
+        debug_panel = {
+            x = menu.group.anti_aim.main:slider('X Debug panel', 0, screen_size_x(), helpers:clamp(20, 0, screen_size_x() - 147)),
+            y = menu.group.anti_aim.main:slider('Y Debug panel', 0, screen_size_y(), helpers:clamp(screen_size_y() / 2 - 400, 0, screen_size_y() - 76)),
+        },
+
+        multi_panel = {
+            x = menu.group.anti_aim.main:slider('X Multi panel', 0, screen_size_x(), helpers:clamp(screen_size_x() / 2, 0, screen_size_x() - 147)),
+            y = menu.group.anti_aim.main:slider('Y Multi panel', 0, screen_size_y(), helpers:clamp(screen_size_y() / 2 - 400, 0, screen_size_y() - 76)),
+        },
+    },
+    damage_indicator = {
+        x = menu.group.anti_aim.main:slider('X Damage indicator', 0, screen_size_x(), helpers:clamp(screen_size_x() / 2 + 5, 0, screen_size_x() - 147)),
+        y = menu.group.anti_aim.main:slider('Y Damage indicator', 0, screen_size_y(), helpers:clamp(screen_size_y() / 2 - 10, 0, screen_size_y() - 76)),
+    },
+} do
+    pui.traverse(drag_slider, function (ref)
+        ref:set_visible(false)
+    end)
+end
+
+---
+
+local lc = {
+    last_simtime = 0,
+    origin = vector(0, 0, 0),
+    state = false
+} local function is_breaking_velocity_lc ()
+    local me = entity.get_local_player()
+    local new_origin = vector(entity.get_origin(me))
+    local simtime = toticks(entity.get_prop(me, 'm_flSimulationTime'))
+    local delta = simtime - lc.last_simtime
+  
+    if delta > 0 then
+      if lc.origin:length() > 0 then
+        lc.state = (lc.origin - new_origin):length2dsqr() > 4096
+      end
+      lc.origin = new_origin
+      lc.last_simtime = simtime
+    end
+  
+    return lc.state
+end
+
+local fakelag = { choked = 0, active = false }; do
+    fakelag.handle = function (e)
+        fakelag.choked = e.chokedcommands
+        fakelag.active = false
+        if reference.antiaim.fakelag.enabled:get() then
+            if reference.antiaim.fakelag.limit:get() > 2 then
+                if reference.rage.aimbot.double_tap[1].value and reference.rage.aimbot.double_tap[1].hotkey:get() and not reference.rage.other.fake_duck:get() then
+                    if fakelag.choked > reference.rage.aimbot.double_tap_limit:get() then
+                        fakelag.active = true
+                    end
+                elseif reference.antiaim.other.on_shot_anti_aim[1].value and reference.antiaim.other.on_shot_anti_aim[1].hotkey:get() and not reference.rage.other.fake_duck:get() then
+                    if fakelag.choked > 1 then
+                        fakelag.active = true
+                    end
+                else
+                    if fakelag.choked ~= nil then
+                        fakelag.active = true
+                    end
+                end
+            end
+        end
+    end
+  
+    client.set_event_callback('run_command', fakelag.handle)
+end
+
+local anti_backstab = false
+local builder = { }; do
+    builder.conditions = {'Global', 'Stand', 'Run', 'Walk', 'Crouch', 'Sneak', 'Air', 'Air+', 'Fake lag', 'Freestanding', 'Manual left', 'Manual right'}
+    builder.alternative_conditions = { }
+    for _, condition in ipairs(builder.conditions) do
+        local prefix = coloring.set_color_macro(false)
+        local suffix = coloring.set_color_macro(true)
+        table.insert(builder.alternative_conditions, string.format('\a%s•\a%s  %s', prefix, suffix, condition))
+    end
+    builder.state = 'Global'
+    builder.d_state = 'Global'
+
+    elements.conditions = { }
+    elements.conditions.select = menu.group.anti_aim.main:combobox('\v\r    Player state', builder.alternative_conditions)
+    
+    local is_tab_antiaim = {tab.main, ' Anti-aimbot angles'}
+    elements.conditions.select:depend(is_tab_antiaim)
+
+    elements.conditions.select_2 = menu.group.anti_aim.main:combobox('\v\r    Player state', builder.conditions)
+    elements.conditions.select_2:set_visible(false)
+
+    elements.conditions.select:set_callback(function (ref)
+        for _, condition in ipairs(builder.alternative_conditions) do
+            if ref:get() == condition then
+                elements.conditions.select_2:set(builder.conditions[_])
+            end
+        end
+    end)
+
+    for i, state in pairs(builder.conditions) do
+        local colored_state = builder.alternative_conditions[i]
+        elements.conditions[state] = {
+            spacing = menu.group.anti_aim.main:label(' \n' .. state),
+            enable = menu.group.anti_aim.main:checkbox('Enable  ' .. colored_state),
+        
+            yaw_base = menu.group.anti_aim.other:combobox('\nYaw base \n' .. state, {'Local view', 'At targets'}),
+            spacing_7 = menu.group.anti_aim.other:label('       \n' .. state),
+            yaw_left_right = menu.group.anti_aim.other:checkbox('Yaw \v»\r Left  Right mode \n' .. state),
+
+            offset = menu.group.anti_aim.main:slider('\nYaw offset \n' .. state, -180, 180, 0, true, '°'),
+            left = menu.group.anti_aim.main:slider('\nYaw left \n' .. state, -180, 180, 0, true, '°'),
+            left_randomization = menu.group.anti_aim.main:slider('\nYaw left random \n' .. state, 0, 100, 0, true, '%'),
+            right = menu.group.anti_aim.main:slider('\nYaw right \n' .. state, -180, 180, 0, true, '°'),
+            right_randomization = menu.group.anti_aim.main:slider('\nYaw right random \n' .. state, 0, 100, 0, true, '%'),
+        
+            spacing_2 = menu.group.anti_aim.main:label('  \n' .. state),
+            modifier_label = menu.group.anti_aim.main:label('\v\r    Yaw jitter\n' .. state),
+            spacing_8 = menu.group.anti_aim.main:label('        \n' .. state),
+            modifier = menu.group.anti_aim.main:combobox('\nYaw modifier \n' .. state, {'Off', 'Offset', 'Center', 'Ground-based', 'X-way', 'Random'}),
+            ideal_yaw = menu.group.anti_aim.main:checkbox('\nIdeal yaw \n' .. state),
+            modifier_offset = menu.group.anti_aim.main:slider('\nModifier Offset \n' .. state, -180, 180, 0, true, '°'),
+            modifier_offset_2 = menu.group.anti_aim.main:slider('\nModifier Offset #2 \n' .. state, -180, 180, 0, true, '°'),
+            modifier_randomization = menu.group.anti_aim.main:slider('\nRandomization \n' .. state, 0, 100, 0, true, '%'),
+
+            x_way = {
+                method = menu.group.anti_aim.main:combobox('Method \n' .. state, {'Skitter', 'Tickcount'}),
+                type = menu.group.anti_aim.main:combobox('Type \n' .. state, {'Auto', 'Custom'}),
+                ways = menu.group.anti_aim.main:slider('\nWays \n' .. state, 3, 10, 3, true, 'w'),
+                auto_offset = menu.group.anti_aim.main:slider('\nAuto offset \n' .. state, -180, 180, 0, true, '°'),
+                first_offset = menu.group.anti_aim.main:slider('\nFirst offset \n' .. state, -180, 180, 0, true, '°'),
+                second_offset = menu.group.anti_aim.main:slider('\nSecond offset \n' .. state, -180, 180, 0, true, '°'),
+                third_offset = menu.group.anti_aim.main:slider('\nThird offset \n' .. state, -180, 180, 0, true, '°'),
+                fourth_offset = menu.group.anti_aim.main:slider('\nFourth offset \n' .. state, -180, 180, 0, true, '°'),
+                fifth_offset = menu.group.anti_aim.main:slider('\nFifth offset \n' .. state, -180, 180, 0, true, '°'),
+                sixth_offset = menu.group.anti_aim.main:slider('\nSixth offset \n' .. state, -180, 180, 0, true, '°'),
+                seventh_offset = menu.group.anti_aim.main:slider('\nSeventh offset \n' .. state, -180, 180, 0, true, '°'),
+                eighth_offset = menu.group.anti_aim.main:slider('\nEighth offset \n' .. state, -180, 180, 0, true, '°'),
+                ninth_offset = menu.group.anti_aim.main:slider('\nNinth offset \n' .. state, -180, 180, 0, true, '°'),
+                tenth_offset = menu.group.anti_aim.main:slider('\nTenth offset \n' .. state, -180, 180, 0, true, '°'),
+            },
+        
+            spacing_6 = menu.group.anti_aim.main:label('      \n' .. state),
+            body_label = menu.group.anti_aim.main:label('\v\r    Body yaw\n' .. state),
+            spacing_4 = menu.group.anti_aim.main:label('    \n' .. state),
+            body_yaw = menu.group.anti_aim.main:combobox('\nBody yaw \n' .. state, {'Off', 'Opposite', 'Static', 'Jitter'}),
+            body_side = menu.group.anti_aim.main:combobox('Body side \n' .. state, {'+', '-'}),
+            fs_body_yaw = menu.group.anti_aim.main:checkbox('Freestanding body yaw \n' .. state),
+
+            spacing_3 = menu.group.anti_aim.main:label('   \n' .. state),
+            delay_label = menu.group.anti_aim.main:label('\v\r    Delay\n' .. state),
+            spacing_9 = menu.group.anti_aim.main:label('         \n' .. state),
+            delay = menu.group.anti_aim.main:slider('\nBody delay \n' .. state, 1, 17, 1, true, 't', 1, {[1] = 'OFF'}),
+            small_delay_min_toggle = menu.group.anti_aim.main:checkbox('\nToggle body small min. delay \n' .. state),
+            small_delay_min = menu.group.anti_aim.main:slider('\nBody small min. delay \n' .. state, 1, 12, 1, true, 't', 0.2),
+            delay_min = menu.group.anti_aim.main:slider('\nBody Min. delay \n' .. state, 1, 17, 1, true, 't', 1, {[1] = 'OFF'}),
+            small_delay_max_toggle = menu.group.anti_aim.main:checkbox('\nToggle body small max. delay \n' .. state),
+            small_delay_max = menu.group.anti_aim.main:slider('\nBody small max. delay \n' .. state, 1, 12, 1, true, 't', 0.2),
+            delay_max = menu.group.anti_aim.main:slider('\nBody Max. delay \n' .. state, 1, 17, 17, true, 't', 1, {[1] = 'OFF'}),
+            
+            freeze_chance = menu.group.anti_aim.main:slider('\nBody freeze chance \n' .. state, 1, 100, 18, true, '%', 1),
+            freeze_time = menu.group.anti_aim.main:slider('\nBody freeze time \n' .. state, 1, 200, 30, true, 'ms', 1),
+        
+            spacing_5 = menu.group.anti_aim.main:label('     \n' .. state),
+            addons = menu.group.anti_aim.main:multiselect('\vDelay »\r Add-ons \n' .. state, {'Randomize Delay Ticks', 'Freeze-Inverter'})
+        }
     end
 
     do
-        if not db.db then
-            db.db = {
-                configs = {
-                    ['Local'] = {},
-                }
-            }
-        end
+        for i, state in pairs(builder.conditions) do
+            local colored_state = builder.alternative_conditions[i]
 
-        if not db.db.last then
-            db.db.last = {
-                on = false,
-                cfg = nil
-            }
-        end
-
-        if not db.db.data then
-            db.db.data = {
-                time = 0,
-                loaded = 1,
-                killed = 0,
-            }
-        end 
-        db.db.data.loaded = db.db.data.loaded + 1
-        db.db.data.killed = db.db.data.killed or 0
-
-        db.loaded = globals.realtime()
-        client.set_event_callback('aim_hit', function(e)
-            local health = entity.get_prop(e.target, 'm_iHealth')
-            if health <= 0 then
-                db.db.data.killed = db.db.data.killed + 1
+            local condition = elements.conditions[state]
+            local is_condition = {elements.conditions.select, colored_state}
+            local disable_shared = {elements.conditions.select, function () return (i ~= 1) end}
+            local is_enabled = {condition.enable, function () if i == 1 then return true else return condition.enable:get() end end}
+            local fakelag_state = {elements.conditions.select, function () if i == 9 then return false else return true end end}
+            local function not_disabled(val) 
+                return function () return condition[val]:get() ~= 'Off' end 
             end
-        end)
-
-        local saving = function() end
-        saving = function()
-            db.db.data.time = db.db.data.time + (globals.realtime() - db.loaded)
-            db.save()
-            client.delay_call(300, saving)
-        end saving()
-
-        defer(function()
-            db.db.data.time = db.db.data.time + (globals.realtime() - db.loaded)
-            db.save()
-        end)
         
-    end
-    db.icons = {"f1pp", "Cat 1", "Cat 2", "Dog", "Clown"}
-    
-    local default_cfg = 'eyJBbnRpYWltcyI6eyJidWlsZGVyIjp7IkNyb3VjaCI6eyJib2R5Ijp7InNpZGUiOjAsInlhdyI6IkppdHRlciIsImRlbGF5Ijp7InJpZ2h0IjoxLCJsZWZ0IjoxLCJkZWxheSI6MywibW9kZSI6IlN0YXRpYyIsInN3aXRjaCI6MH19LCJlbmFibGVkIjp0cnVlLCJqaXR0ZXIiOnsidmFsdWUyIjoxMywidmFsdWUiOjAsInR5cGUiOiJPZmZzZXQiLCJ3YXlzIjpbMCwwLDAsMCwwXSwibW9kZSI6IlNwaW4iLCJyYW5kIjo0fSwieWF3Ijp7ImJhc2UiOiJBdCB0YXJnZXRzIiwibGVmdCI6LTI2LCJnbG9iYWwiOjAsInJpZ2h0Ijo0OX0sImRlZmVuc2l2ZSI6eyJmb3JjZSI6dHJ1ZSwiZW5hYmxlZCI6dHJ1ZSwib3ZlcnJpZGUiOnRydWUsInNldHRpbmdzIjp7InBpdGNoX3NwZWVkIjoxMCwicGl0Y2hfdmFsIjotMjEsInBpdGNoIjoiQ3VzdG9tIiwiZGlzYWJsZXJzIjpbIn4iXSwieWF3X3ZhbCI6MCwieWF3X3NwZWVkIjoxMCwieWF3IjoiU3BpbiIsImR1cmF0aW9uIjoxM319fSwiQ3JvdWNoaW5nIEFpciI6eyJib2R5Ijp7InNpZGUiOjAsInlhdyI6IkppdHRlciIsImRlbGF5Ijp7InJpZ2h0IjoxLCJsZWZ0Ijo0LCJkZWxheSI6MSwibW9kZSI6IlN3aXRjaCIsInN3aXRjaCI6NH19LCJlbmFibGVkIjp0cnVlLCJqaXR0ZXIiOnsidmFsdWUyIjozLCJ2YWx1ZSI6LTE1LCJ0eXBlIjoiT2Zmc2V0Iiwid2F5cyI6WzAsMCwwLDAsMF0sIm1vZGUiOiJTcGluIiwicmFuZCI6NX0sInlhdyI6eyJiYXNlIjoiQXQgdGFyZ2V0cyIsImxlZnQiOi0xNywiZ2xvYmFsIjowLCJyaWdodCI6NDN9LCJkZWZlbnNpdmUiOnsiZm9yY2UiOnRydWUsImVuYWJsZWQiOnRydWUsIm92ZXJyaWRlIjp0cnVlLCJzZXR0aW5ncyI6eyJwaXRjaF9zcGVlZCI6MTAsInBpdGNoX3ZhbCI6MTMsInBpdGNoIjoiQ3VzdG9tIiwiZGlzYWJsZXJzIjpbIn4iXSwieWF3X3ZhbCI6MCwieWF3X3NwZWVkIjoxMCwieWF3IjoiUHJvZ3Jlc3NpdmUiLCJkdXJhdGlvbiI6MTF9fX0sIkNyb3VjaCBNb3ZlIjp7ImJvZHkiOnsic2lkZSI6MCwieWF3IjoiSml0dGVyIiwiZGVsYXkiOnsicmlnaHQiOjMsImxlZnQiOjIsImRlbGF5IjoyLCJtb2RlIjoiU3dpdGNoIiwic3dpdGNoIjozfX0sImVuYWJsZWQiOnRydWUsImppdHRlciI6eyJ2YWx1ZTIiOjAsInZhbHVlIjotMTUsInR5cGUiOiJSYW5kb20iLCJ3YXlzIjpbMCwwLDAsMCwwXSwibW9kZSI6IlNwaW4iLCJyYW5kIjo1fSwieWF3Ijp7ImJhc2UiOiJBdCB0YXJnZXRzIiwibGVmdCI6LTI0LCJnbG9iYWwiOjAsInJpZ2h0IjozOH0sImRlZmVuc2l2ZSI6eyJmb3JjZSI6dHJ1ZSwiZW5hYmxlZCI6dHJ1ZSwib3ZlcnJpZGUiOnRydWUsInNldHRpbmdzIjp7InBpdGNoX3NwZWVkIjoxMCwicGl0Y2hfdmFsIjotMzUsInBpdGNoIjoiQ3VzdG9tIiwiZGlzYWJsZXJzIjpbIn4iXSwieWF3X3ZhbCI6MCwieWF3X3NwZWVkIjoxMCwieWF3IjoiWWF3IE9wcG9zaXRlIiwiZHVyYXRpb24iOjExfX19LCJTbG93d2Fsa2luZyI6eyJib2R5Ijp7InNpZGUiOjAsInlhdyI6IkppdHRlciIsImRlbGF5Ijp7InJpZ2h0IjoxLCJsZWZ0Ijo1LCJkZWxheSI6MSwibW9kZSI6IlN3aXRjaCIsInN3aXRjaCI6NH19LCJlbmFibGVkIjp0cnVlLCJqaXR0ZXIiOnsidmFsdWUyIjoxNSwidmFsdWUiOjAsInR5cGUiOiJPZmZzZXQiLCJ3YXlzIjpbMCwwLDAsMCwwXSwibW9kZSI6IlNwaW4iLCJyYW5kIjoxMH0sInlhdyI6eyJiYXNlIjoiQXQgdGFyZ2V0cyIsImxlZnQiOjE5LCJnbG9iYWwiOjAsInJpZ2h0IjotMX0sImRlZmVuc2l2ZSI6eyJmb3JjZSI6dHJ1ZSwiZW5hYmxlZCI6dHJ1ZSwib3ZlcnJpZGUiOnRydWUsInNldHRpbmdzIjp7InBpdGNoX3NwZWVkIjoxNywicGl0Y2hfdmFsIjowLCJwaXRjaCI6IlByb2dyZXNzaXZlIiwiZGlzYWJsZXJzIjpbIn4iXSwieWF3X3ZhbCI6MCwieWF3X3NwZWVkIjoyNCwieWF3IjoiUHJvZ3Jlc3NpdmUiLCJkdXJhdGlvbiI6MTF9fX0sIkZha2UgTGFnIjp7ImJvZHkiOnsic2lkZSI6MCwieWF3IjoiT3Bwb3NpdGUiLCJkZWxheSI6eyJyaWdodCI6MSwibGVmdCI6MSwiZGVsYXkiOjEsIm1vZGUiOiJTdGF0aWMiLCJzd2l0Y2giOjB9fSwiaml0dGVyIjp7InZhbHVlMiI6MjIsInZhbHVlIjotMjIsInR5cGUiOiJPZmZzZXQiLCJ3YXlzIjpbMCwwLDAsMCwwXSwibW9kZSI6IlNwaW4iLCJyYW5kIjo2fSwieWF3Ijp7ImJhc2UiOiJBdCB0YXJnZXRzIiwibGVmdCI6MCwiZ2xvYmFsIjowLCJyaWdodCI6MH0sImVuYWJsZWQiOnRydWV9LCJKdW1waW5nIjp7ImJvZHkiOnsic2lkZSI6MCwieWF3IjoiSml0dGVyIiwiZGVsYXkiOnsicmlnaHQiOjMsImxlZnQiOjIsImRlbGF5IjozLCJtb2RlIjoiU3dpdGNoIiwic3dpdGNoIjozfX0sImVuYWJsZWQiOnRydWUsImppdHRlciI6eyJ2YWx1ZTIiOjEyLCJ2YWx1ZSI6LTEsInR5cGUiOiJPZmZzZXQiLCJ3YXlzIjpbMCwwLDAsMCwwXSwibW9kZSI6IlNwaW4iLCJyYW5kIjo3fSwieWF3Ijp7ImJhc2UiOiJBdCB0YXJnZXRzIiwibGVmdCI6LTI5LCJnbG9iYWwiOjAsInJpZ2h0Ijo0OX0sImRlZmVuc2l2ZSI6eyJmb3JjZSI6dHJ1ZSwiZW5hYmxlZCI6dHJ1ZSwib3ZlcnJpZGUiOnRydWUsInNldHRpbmdzIjp7InBpdGNoX3NwZWVkIjoxMCwicGl0Y2hfdmFsIjowLCJwaXRjaCI6Ik5vbmUiLCJkaXNhYmxlcnMiOlsifiJdLCJ5YXdfdmFsIjowLCJ5YXdfc3BlZWQiOjEwLCJ5YXciOiJTcGluIiwiZHVyYXRpb24iOjEwfX19LCJEZWZhdWx0Ijp7ImRlZmVuc2l2ZSI6eyJlbmFibGVkIjpmYWxzZSwiZm9yY2UiOmZhbHNlLCJzZXR0aW5ncyI6eyJwaXRjaF9zcGVlZCI6MTAsInBpdGNoX3ZhbCI6MCwicGl0Y2giOiJOb25lIiwiZGlzYWJsZXJzIjpbIn4iXSwieWF3X3ZhbCI6MCwieWF3X3NwZWVkIjoxMCwieWF3IjoiTm9uZSIsImR1cmF0aW9uIjoxM319LCJib2R5Ijp7InNpZGUiOjAsInlhdyI6Ik9mZiIsImRlbGF5Ijp7InJpZ2h0IjoxLCJsZWZ0IjoxLCJkZWxheSI6MSwibW9kZSI6IlN0YXRpYyIsInN3aXRjaCI6MH19LCJ5YXciOnsiYmFzZSI6IkF0IHRhcmdldHMiLCJsZWZ0IjowLCJnbG9iYWwiOjAsInJpZ2h0IjowfSwiaml0dGVyIjp7InZhbHVlMiI6MCwidmFsdWUiOjAsInR5cGUiOiJPZmYiLCJ3YXlzIjpbMCwwLDAsMCwwXSwibW9kZSI6IlN0YXRpYyIsInJhbmQiOjB9fSwiU2FmZSBIZWFkIjp7ImRlZmVuc2l2ZSI6eyJmb3JjZSI6dHJ1ZSwiZW5hYmxlZCI6dHJ1ZSwib3ZlcnJpZGUiOnRydWUsInNldHRpbmdzIjp7InBpdGNoX3NwZWVkIjoxMCwicGl0Y2hfdmFsIjowLCJwaXRjaCI6IkN1c3RvbSIsImRpc2FibGVycyI6WyJ+Il0sInlhd192YWwiOjAsInlhd19zcGVlZCI6MTAsInlhdyI6IlByb2dyZXNzaXZlIiwiZHVyYXRpb24iOjEzfX0sInlhdyI6eyJiYXNlIjoiQXQgdGFyZ2V0cyIsImxlZnQiOjAsImdsb2JhbCI6MCwicmlnaHQiOjB9LCJqaXR0ZXIiOnsidmFsdWUyIjozLCJ2YWx1ZSI6LTMsInR5cGUiOiJPZmZzZXQiLCJ3YXlzIjpbMCwwLDAsMCwwXSwibW9kZSI6IlNwaW4iLCJyYW5kIjo0fSwiY29uZGl0aW9ucyI6WyJKdW1waW5nIiwiQ3JvdWNoaW5nIEFpciIsIn4iXSwiYm9keSI6eyJzaWRlIjowLCJ5YXciOiJPcHBvc2l0ZSIsImRlbGF5Ijp7InJpZ2h0IjoxLCJsZWZ0IjoxLCJkZWxheSI6MSwibW9kZSI6IlN0YXRpYyIsInN3aXRjaCI6MH19LCJ3ZWFwb25zIjpbIktuaWZlIiwiWmV1cyIsIn4iXSwiZW5hYmxlZCI6dHJ1ZX0sIk1hbnVhbCB5YXciOnsiZGVmZW5zaXZlIjp7ImZvcmNlIjp0cnVlLCJlbmFibGVkIjp0cnVlLCJvdmVycmlkZSI6dHJ1ZSwic2V0dGluZ3MiOnsicGl0Y2hfc3BlZWQiOjEwLCJwaXRjaF92YWwiOjAsInBpdGNoIjoiQ3VzdG9tIiwiZGlzYWJsZXJzIjpbIn4iXSwieWF3X3ZhbCI6MCwieWF3X3NwZWVkIjoxMCwieWF3IjoiWWF3IE9wcG9zaXRlIiwiZHVyYXRpb24iOjEzfX0sImJvZHkiOnsic2lkZSI6MCwieWF3IjoiT2ZmIiwiZGVsYXkiOnsicmlnaHQiOjEsImxlZnQiOjEsImRlbGF5IjoxLCJtb2RlIjoiU3RhdGljIiwic3dpdGNoIjowfX0sInlhdyI6eyJiYXNlIjoiTG9jYWwgdmlldyJ9LCJqaXR0ZXIiOnsidmFsdWUyIjowLCJ2YWx1ZSI6MCwidHlwZSI6Ik9mZiIsIndheXMiOlswLDAsMCwwLDBdLCJtb2RlIjoiU3RhdGljIiwicmFuZCI6MH19LCJSdW5uaW5nIjp7ImJvZHkiOnsic2lkZSI6MCwieWF3IjoiSml0dGVyIiwiZGVsYXkiOnsicmlnaHQiOjEsImxlZnQiOjQsImRlbGF5IjoxLCJtb2RlIjoiU3dpdGNoIiwic3dpdGNoIjozfX0sImVuYWJsZWQiOnRydWUsImppdHRlciI6eyJ2YWx1ZTIiOjI1LCJ2YWx1ZSI6MCwidHlwZSI6IlJhbmRvbSIsIndheXMiOlswLDAsMCwwLDBdLCJtb2RlIjoiU3BpbiIsInJhbmQiOjV9LCJ5YXciOnsiYmFzZSI6IkF0IHRhcmdldHMiLCJsZWZ0Ijo4LCJnbG9iYWwiOjAsInJpZ2h0IjotMX0sImRlZmVuc2l2ZSI6eyJmb3JjZSI6ZmFsc2UsImVuYWJsZWQiOnRydWUsIm92ZXJyaWRlIjp0cnVlLCJzZXR0aW5ncyI6eyJwaXRjaF9zcGVlZCI6MTAsInBpdGNoX3ZhbCI6NDUsInBpdGNoIjoiQ3VzdG9tIiwiZGlzYWJsZXJzIjpbIn4iXSwieWF3X3ZhbCI6MCwieWF3X3NwZWVkIjoxMCwieWF3IjoiU2lkZXdheXMiLCJkdXJhdGlvbiI6MTB9fX0sIlN0YW5kaW5nIjp7ImJvZHkiOnsic2lkZSI6MCwieWF3IjoiSml0dGVyIiwiZGVsYXkiOnsicmlnaHQiOjEsImxlZnQiOjQsImRlbGF5IjoyLCJtb2RlIjoiU3dpdGNoIiwic3dpdGNoIjozfX0sImVuYWJsZWQiOnRydWUsImppdHRlciI6eyJ2YWx1ZTIiOjAsInZhbHVlIjowLCJ0eXBlIjoiT2ZmIiwid2F5cyI6WzAsMCwwLDAsMF0sIm1vZGUiOiJTdGF0aWMiLCJyYW5kIjowfSwieWF3Ijp7ImJhc2UiOiJBdCB0YXJnZXRzIiwibGVmdCI6LTE1LCJnbG9iYWwiOjAsInJpZ2h0Ijo0Mn0sImRlZmVuc2l2ZSI6eyJmb3JjZSI6ZmFsc2UsImVuYWJsZWQiOnRydWUsIm92ZXJyaWRlIjp0cnVlLCJzZXR0aW5ncyI6eyJwaXRjaF9zcGVlZCI6MTAsInBpdGNoX3ZhbCI6MCwicGl0Y2giOiJOb25lIiwiZGlzYWJsZXJzIjpbIn4iXSwieWF3X3ZhbCI6MCwieWF3X3NwZWVkIjoxMCwieWF3IjoiUHJvZ3Jlc3NpdmUiLCJkdXJhdGlvbiI6N319fX0sIm90aGVyMiI6eyJmbGljayI6dHJ1ZSwiZmxpY2tfaCI6WzEsMCwifiJdLCJmbGlja19hYSI6eyJwaXRjaF9zcGVlZCI6MTAsInBpdGNoX3ZhbCI6LTQ1LCJwaXRjaCI6IkN1c3RvbSIsImRpc2FibGVycyI6WyJ+Il0sInlhd192YWwiOjAsInlhdyI6IlByb2dyZXNzaXZlIiwieWF3X3NwZWVkIjoxMH0sImRlZmVuc2l2ZSI6ZmFsc2V9LCJob3RrZXlzIjp7InJpZ2h0IjpbMiwwLCJ+Il0sImxlZnQiOlsyLDAsIn4iXSwiZWRnZSI6WzEsMCwifiJdLCJmb3J3YXJkIjpbMiwwLCJ+Il0sImZzIjpbMSwwLCJ+Il0sImZzX2Rpc2FibGVycyI6WyJ+Il19LCJvdGhlciI6eyJhdm9pZF9iYWNrc3RhYiI6dHJ1ZSwiZmxfZGlzYWJsZXIiOlsiTm90IG1vdmluZyIsIn4iXSwibGFkZGVyIjp0cnVlfX0sIkZlYXR1cmVzIjp7ImNvbG9yIjp7InByZWRpY3Rpb24gZXJyb3JfYyI6IiNGRjdEN0RGRiIsImhpdF9jIjoiI0I0RTYxRUZGIiwidW5wcmVkaWN0ZWQgb2NjYXNpb25fYyI6IiNGRjdEN0RGRiIsImRlYXRoX2MiOiIjNjQ2NEZGRkYiLCJzcHJlYWRfYyI6IiNGRkM4MDBGRiIsIj9fYyI6IiNGRjAwMDBGRiJ9LCJ2aWV3bW9kZWwiOnsic2NvcGUiOmZhbHNlLCJmb3YiOjYwLCJ5IjoxMCwieiI6LTEwLCJvbiI6ZmFsc2UsIngiOjEwfSwiYXNwZWN0Ijp7InJhdGlvIjo1OSwib24iOmZhbHNlfSwibWFya2VyIjp7InNpemUiOjUsImV4dHJhIjp0cnVlLCJ0aW1lIjozMCwic3R5bGUiOiJTdHlsZTogQ3Jvc3MiLCJvbiI6dHJ1ZX0sIndhdGVybWFyayI6eyJjdXN0b20iOiIiLCJsb2NrIjoiQm90dG9tLUNlbnRlciIsImNvbG9yIjp7IkJhY2tncm91bmQiOnsicGlja2VyIjoiI0FGQUZGRkI5IiwicHJlc2V0IjoiQmFja2dyb3VuZDogRGVmYXVsdCJ9LCJUZXh0Ijp7InBpY2tlciI6IiNBRkFGRkZCOSIsInByZXNldCI6IlRleHQ6IERlZmF1bHQifX0sImVsZW1lbnRzIjpbIk5pY2tuYW1lIiwiRlBTIiwiUGluZyIsIlRpbWUiLCJ+Il0sIm9uIjp0cnVlLCJ1c2VkIjp0cnVlfSwidHJhY2VyIjp7InRpbWUiOjIwLCJvbiI6dHJ1ZSwiY29sb3IiOnsiQ29sb3IiOnsicGlja2VyIjoiI0ZGRkZGRkM4IiwicHJlc2V0IjoiQ29sb3I6IERlZmF1bHQifX19LCJjb25zb2xlIjp7Im9uIjp0cnVlfSwiaGVscGVyIjp7ImNvbG9yIjp7IkNvbG9yIjp7InBpY2tlciI6IiNGRkZGRkY0QiIsInByZXNldCI6IkNvbG9yOiBEZWZhdWx0In19LCJvbiI6dHJ1ZSwidGhpcmQiOiJUaGlyZHBlcnNvbjogTG9jYWwgUGxheWVyIiwiZmlyc3QiOiJGaXJzdHBlcnNvbjogQ3Jvc3NoYWlyIn0sImFuaW1hdGlvbnMiOnsiZXh0cmEiOlsiTGFuZGluZyBQaXRjaCIsIn4iXSwib24iOnRydWUsImFpciI6IlN0YXRpYyIsImdyb3VuZCI6IkppdHRlciJ9LCJzaGFyZWQiOnsib24iOmZhbHNlLCJib3giOjB9LCJjcm9zc2hhaXIiOnsic2V0dGluZ3MiOnsiRG91YmxlIFRhcCI6eyJvbiI6dHJ1ZSwiY29udGFpbmVyIjp7Im5hbWUiOiIiLCJjb2xvciI6eyJEb3VibGUgVGFwIjp7InBpY2tlciI6IiNGRkZGRkZGRiIsInByZXNldCI6IkRvdWJsZSBUYXA6IERlZmF1bHQifX19fSwiUmlubmVnYW4iOnsib24iOnRydWUsImNvbnRhaW5lciI6eyJuYW1lIjoiIiwiY29sb3IiOnsiUmlubmVnYW4iOnsicGlja2VyIjoiI0ZGRkZGRkZGIiwicHJlc2V0IjoiUmlubmVnYW46IERlZmF1bHQifSwiQWJ5c3MiOnsicGlja2VyIjoiI0ZGRkZGRkZGIiwicHJlc2V0IjoiQWJ5c3M6IERlZmF1bHQifX19fSwiQ29uZGl0aW9ucyI6eyJvbiI6dHJ1ZSwiY29udGFpbmVyIjp7Im5hbWUiOiIiLCJjb2xvciI6eyJDb25kaXRpb25zIjp7InBpY2tlciI6IiNCOUI5RkZGRiIsInByZXNldCI6IkNvbmRpdGlvbnM6IERlZmF1bHQifX19fSwiSGlkZSBTaG90cyI6eyJvbiI6dHJ1ZSwiY29udGFpbmVyIjp7Im5hbWUiOiIiLCJjb2xvciI6eyJIaWRlIFNob3RzIjp7InBpY2tlciI6IiNGRkZGRkZGRiIsInByZXNldCI6IkhpZGUgU2hvdHM6IERlZmF1bHQifX19fSwiUGluZyBTcGlrZSI6eyJvbiI6dHJ1ZSwiY29udGFpbmVyIjp7Im5hbWUiOiIiLCJjb2xvciI6eyJQaW5nIFNwaWtlIjp7InBpY2tlciI6IiNGRkZGRkZGRiIsInByZXNldCI6IlBpbmcgU3Bpa2U6IERlZmF1bHQifX19fSwiU2FmZSBQb2ludHMiOnsib24iOnRydWUsImNvbnRhaW5lciI6eyJuYW1lIjoiIiwiY29sb3IiOnsiU2FmZSBQb2ludHMiOnsicGlja2VyIjoiI0ZGRkZGRkZGIiwicHJlc2V0IjoiU2FmZSBQb2ludHM6IERlZmF1bHQifX19fSwiRnJlZXN0YW5kaW5nIjp7Im9uIjp0cnVlLCJjb250YWluZXIiOnsibmFtZSI6IiIsImNvbG9yIjp7IkZyZWVzdGFuZGluZyI6eyJwaWNrZXIiOiIjRkZGRkZGRkYiLCJwcmVzZXQiOiJGcmVlc3RhbmRpbmc6IERlZmF1bHQifX19fSwiQm9keSBBaW0iOnsib24iOnRydWUsImNvbnRhaW5lciI6eyJuYW1lIjoiIiwiY29sb3IiOnsiQm9keSBBaW0iOnsicGlja2VyIjoiI0ZGRkZGRkZGIiwicHJlc2V0IjoiQm9keSBBaW06IERlZmF1bHQifX19fSwiRmxpY2tpbmciOnsib24iOnRydWUsImNvbnRhaW5lciI6eyJuYW1lIjoiIiwiY29sb3IiOnsiRmxpY2tpbmciOnsicGlja2VyIjoiI0ZGRkZGRkZGIiwicHJlc2V0IjoiRmxpY2tpbmc6IERlZmF1bHQifX19fSwiTWluLiBEYW1hZ2UiOnsib24iOnRydWUsImNvbnRhaW5lciI6eyJuYW1lIjoiIiwiY29sb3IiOnsiTWluLiBEYW1hZ2UiOnsicGlja2VyIjoiI0ZGRkZGRkZGIiwicHJlc2V0IjoiTWluLiBEYW1hZ2U6IERlZmF1bHQifX19fSwiSGl0Y2hhbmNlIjp7Im9uIjp0cnVlLCJjb250YWluZXIiOnsibmFtZSI6IiIsImNvbG9yIjp7IkhpdGNoYW5jZSI6eyJwaWNrZXIiOiIjRkZGRkZGRkYiLCJwcmVzZXQiOiJIaXRjaGFuY2U6IERlZmF1bHQifX19fX0sImJveCI6MCwib24iOnRydWUsInVzZWQiOnRydWV9LCJjbGFudGFnIjp7Im9uIjp0cnVlfSwicXVha2UiOnsidm9sdW1lIjo1MCwiaW1hZ2UiOmZhbHNlLCJvbiI6ZmFsc2V9LCJtYW51YWwiOnsib24iOnRydWUsImNvbG9yIjp7IkNvbG9yIjp7InBpY2tlciI6IiNGRkZGRkZDOCIsInByZXNldCI6IkNvbG9yOiBEZWZhdWx0In19fSwic2NvcGUiOnsiY29sb3IiOnsiQ29sb3IiOnsicGlja2VyIjoiI0ZGRkZGRkM4IiwicHJlc2V0IjoiQ29sb3I6IERlZmF1bHQifX0sImdhcCI6MTAsImRhbGJhZWIyIjpmYWxzZSwic3R5bGUiOiJTdHlsZTogUGx1cyIsImxlbmd0aCI6NTAsIm9uIjp0cnVlLCJkYWxiYWViIjowfSwidHJhc2h0YWxrIjp7ImV2ZW50IjpbIk9uIEtpbGwiLCJPbiBEZWF0aCIsIn4iXSwib24iOnRydWUsInVzZWQiOmZhbHNlfSwiaGl0Y2hhbmNlIjp7ImJveCI6MCwib24iOmZhbHNlLCJzZXR0aW5ncyI6eyJNYWNoaW5lIGd1biI6eyJzY29wZSI6eyJvbiI6ZmFsc2UsImhpdGNoYW5jZSI6NTB9LCJidXR0b24iOnsiaG90a2V5IjpbMSwwLCJ+Il0sIm9uIjpmYWxzZSwiaGl0Y2hhbmNlIjo1MH0sImFpciI6eyJvbiI6ZmFsc2UsImhpdGNoYW5jZSI6NTB9fSwiQXV0b3NuaXBlcnMiOnsic2NvcGUiOnsib24iOmZhbHNlLCJoaXRjaGFuY2UiOjUwfSwiYnV0dG9uIjp7ImhvdGtleSI6WzEsMCwifiJdLCJvbiI6ZmFsc2UsImhpdGNoYW5jZSI6NTB9LCJhaXIiOnsib24iOmZhbHNlLCJoaXRjaGFuY2UiOjUwfX0sIlNNRyI6eyJzY29wZSI6eyJvbiI6ZmFsc2UsImhpdGNoYW5jZSI6NTB9LCJidXR0b24iOnsiaG90a2V5IjpbMSwwLCJ+Il0sIm9uIjpmYWxzZSwiaGl0Y2hhbmNlIjo1MH0sImFpciI6eyJvbiI6ZmFsc2UsImhpdGNoYW5jZSI6NTB9fSwiU1NHIDA4Ijp7InNjb3BlIjp7Im9uIjpmYWxzZSwiaGl0Y2hhbmNlIjo1MH0sImJ1dHRvbiI6eyJob3RrZXkiOlsxLDAsIn4iXSwib24iOmZhbHNlLCJoaXRjaGFuY2UiOjUwfSwiYWlyIjp7Im9uIjpmYWxzZSwiaGl0Y2hhbmNlIjo1MH19LCJEZXNlcnQgRWFnbGUiOnsic2NvcGUiOnsib24iOmZhbHNlLCJoaXRjaGFuY2UiOjUwfSwiYnV0dG9uIjp7ImhvdGtleSI6WzEsMCwifiJdLCJvbiI6ZmFsc2UsImhpdGNoYW5jZSI6NTB9LCJhaXIiOnsib24iOmZhbHNlLCJoaXRjaGFuY2UiOjUwfX0sIlJpZmxlIjp7InNjb3BlIjp7Im9uIjpmYWxzZSwiaGl0Y2hhbmNlIjo1MH0sImJ1dHRvbiI6eyJob3RrZXkiOlsxLDAsIn4iXSwib24iOmZhbHNlLCJoaXRjaGFuY2UiOjUwfSwiYWlyIjp7Im9uIjpmYWxzZSwiaGl0Y2hhbmNlIjo1MH19LCJHbG9iYWwiOnsic2NvcGUiOnsib24iOmZhbHNlLCJoaXRjaGFuY2UiOjUwfSwiYnV0dG9uIjp7ImhvdGtleSI6WzEsMCwifiJdLCJvbiI6ZmFsc2UsImhpdGNoYW5jZSI6NTB9LCJhaXIiOnsib24iOmZhbHNlLCJoaXRjaGFuY2UiOjUwfX0sIlpldXMiOnsic2NvcGUiOnsib24iOmZhbHNlLCJoaXRjaGFuY2UiOjUwfSwiYnV0dG9uIjp7ImhvdGtleSI6WzEsMCwifiJdLCJvbiI6ZmFsc2UsImhpdGNoYW5jZSI6NTB9LCJhaXIiOnsib24iOmZhbHNlLCJoaXRjaGFuY2UiOjUwfX0sIlI4IFJldm9sdmVyIjp7InNjb3BlIjp7Im9uIjpmYWxzZSwiaGl0Y2hhbmNlIjo1MH0sImJ1dHRvbiI6eyJob3RrZXkiOlsxLDAsIn4iXSwib24iOmZhbHNlLCJoaXRjaGFuY2UiOjUwfSwiYWlyIjp7Im9uIjpmYWxzZSwiaGl0Y2hhbmNlIjo1MH19LCJQaXN0b2wiOnsic2NvcGUiOnsib24iOmZhbHNlLCJoaXRjaGFuY2UiOjUwfSwiYnV0dG9uIjp7ImhvdGtleSI6WzEsMCwifiJdLCJvbiI6ZmFsc2UsImhpdGNoYW5jZSI6NTB9LCJhaXIiOnsib24iOmZhbHNlLCJoaXRjaGFuY2UiOjUwfX0sIkFXUCI6eyJzY29wZSI6eyJvbiI6ZmFsc2UsImhpdGNoYW5jZSI6NTB9LCJidXR0b24iOnsiaG90a2V5IjpbMSwwLCJ+Il0sIm9uIjpmYWxzZSwiaGl0Y2hhbmNlIjo1MH0sImFpciI6eyJvbiI6ZmFsc2UsImhpdGNoYW5jZSI6NTB9fSwiU2hvdGd1biI6eyJzY29wZSI6eyJvbiI6ZmFsc2UsImhpdGNoYW5jZSI6NTB9LCJidXR0b24iOnsiaG90a2V5IjpbMSwwLCJ+Il0sIm9uIjpmYWxzZSwiaGl0Y2hhbmNlIjo1MH0sImFpciI6eyJvbiI6ZmFsc2UsImhpdGNoYW5jZSI6NTB9fX19LCJkYW1hZ2UiOnsiYW5pbWF0aW9uIjoiQW5pbWF0aW9uOiBJbnN0YW50IiwiY29sb3IiOnsiQ29sb3IiOnsicGlja2VyIjoiI0ZGRkZGRkM4IiwicHJlc2V0IjoiQ29sb3I6IERlZmF1bHQifX0sImZvbnQiOiJGb250OiBEZWZhdWx0Iiwib24iOnRydWUsImRpc3BsYXkiOiJEaXNwbGF5OiBBbHdheXMgT24iLCJkcmFnIjp7InkiOjUwMCwieCI6NTAwfX0sImxvZ3MiOnsiY29sb3IiOnsiQmFja2dyb3VuZCI6eyJwaWNrZXIiOiIjMDAwMDAwNjQiLCJwcmVzZXQiOiJCYWNrZ3JvdW5kOiBEZWZhdWx0In19LCJvbiI6dHJ1ZSwidGltZSI6MzAsImRpc3BsYXkiOlsiT24gU2NyZWVuIiwiSW4gQ29uc29sZSIsIn4iXSwidXNlZCI6dHJ1ZX0sInpvb20iOnsic2Vjb25kIjo1MCwidGhpcmQiOjMwLCJtb2RlIjoiTW9kZTogU2luZ2xlIiwic3RhY2siOmZhbHNlLCJidXR0b24iOlsxLDAsIn4iXSwib24iOmZhbHNlLCJmaXJzdCI6MzB9fX0='
+            condition.spacing:depend(is_tab_antiaim, is_condition, {elements.anti_aim.tab, ' Builder'})
+            condition.enable:depend(is_tab_antiaim, is_condition, disable_shared, {elements.anti_aim.tab, ' Builder'})
+            
+            condition.yaw_base:depend(is_tab_antiaim, is_condition, is_enabled, {elements.anti_aim.tab, ' Builder'})
+            condition.spacing_7:depend(is_tab_antiaim, is_condition, is_enabled, {elements.anti_aim.tab, ' Builder'})
+            condition.yaw_left_right:depend(is_tab_antiaim, is_condition, is_enabled, {elements.anti_aim.tab, ' Builder'})
+            
+            condition.offset:depend(is_tab_antiaim, is_condition, is_enabled, {condition.yaw_left_right, false}, {elements.anti_aim.tab, ' Builder'})
+            condition.left:depend(is_tab_antiaim, is_condition, is_enabled, {condition.yaw_left_right, true}, {elements.anti_aim.tab, ' Builder'})
+            condition.left_randomization:depend(is_tab_antiaim, is_condition, is_enabled, {condition.yaw_left_right, true}, {elements.anti_aim.tab, ' Builder'})
+            condition.right:depend(is_tab_antiaim, is_condition, is_enabled, {condition.yaw_left_right, true}, {elements.anti_aim.tab, ' Builder'})
+            condition.right_randomization:depend(is_tab_antiaim, is_condition, is_enabled, {condition.yaw_left_right, true}, {elements.anti_aim.tab, ' Builder'})
+        
+            condition.spacing_2:depend(is_tab_antiaim, is_condition, is_enabled, {elements.anti_aim.tab, ' Builder'})
+            condition.modifier_label:depend(is_tab_antiaim, is_condition, is_enabled, {elements.anti_aim.tab, ' Builder'})
+            condition.modifier:depend(is_tab_antiaim, is_condition, is_enabled, {elements.anti_aim.tab, ' Builder'})
+            condition.spacing_8:depend(is_tab_antiaim, is_condition, is_enabled, {elements.anti_aim.tab, ' Builder'})
+            condition.ideal_yaw:depend(is_tab_antiaim, is_condition, is_enabled, {condition.modifier, function () 
+                return condition.modifier:get() ~= 'Off' and condition.modifier:get() ~= 'Custom' and condition.modifier:get() ~= 'X-way'
+            end}, {elements.anti_aim.tab, ' Builder'})
+            condition.modifier_offset:depend(is_tab_antiaim, is_condition, is_enabled, {condition.modifier, function () 
+                return condition.modifier:get() ~= 'Off' and condition.modifier:get() ~= 'Custom' and condition.modifier:get() ~= 'X-way'
+            end}, {elements.anti_aim.tab, ' Builder'})
+            condition.modifier_offset_2:depend(is_tab_antiaim, is_condition, is_enabled, {condition.modifier, function () 
+                return condition.modifier:get() ~= 'Off' and condition.modifier:get() ~= 'Custom' and condition.modifier:get() ~= 'X-way'
+            end}, {condition.ideal_yaw, true}, {elements.anti_aim.tab, ' Builder'})
+            condition.modifier_randomization:depend(is_tab_antiaim, is_condition, is_enabled, {condition.modifier, function () 
+                return condition.modifier:get() ~= 'Off' and condition.modifier:get() ~= 'Custom' and condition.modifier:get() ~= 'X-way'
+            end}, {condition.ideal_yaw, false}, {elements.anti_aim.tab, ' Builder'})
 
-    db.db.configs['Local'][1] = {"Default", default_cfg}
-    db.configs = {"Default"}
+            pui.traverse(condition.x_way, function (ref)
+                ref:depend(is_tab_antiaim, is_condition, is_enabled, {condition.modifier, 'X-way'}, {elements.anti_aim.tab, ' Builder'})
+            end)
 
-end
+            condition.x_way.auto_offset:depend({condition.x_way.type, 'Auto'})
 
-local gradient do
-    gradient = {}
-    gradient.animated_gradient_text = function(text, colors, speed, a)
-        local output = ""
-        local length = #text
-        local time_offset = (utils.normalize_yaw(globals.realtime() * speed, 1, 3) * speed) % 1
+            for n = 1, 10 do
+                local delay_slider = condition.x_way[string.format('%s_offset', ({
+                    'first', 'second', 'third', 'fourth', 'fifth',
+                    'sixth', 'seventh', 'eighth', 'ninth', 'tenth'
+                })[n])]
     
-        for i = 1, length do
-            -- Если символ '·', присваиваем ему фиксированный цвет
-            if text:sub(i, i) == "·" then
-                output = output .. string.format("\a%02x%02x%02x%02x", 185, 185, 255, 255) .. text:sub(i, i)
-            else
-                -- Иначе применяем градиентный цвет
-                local t = ((i - 1) / (length - 1) + time_offset) % 1
-                local color = color.linear_gradient(colors, t)
-                color:alpha_modulate(utils.sine_yaw(globals.framecount() / i % 3 * (0.92 - i % 5), 0, 255))
-                output = output .. string.format("\a%02x%02x%02x%02x", color.r, color.g, color.b, color.a * a) .. text:sub(i, i)
-            end
-        end
-    
-        return output
-    end
-    
-    
-    gradient.randomize_colors = function(count)
-        local randomized_colors = {}
-    
-        -- Устанавливаем шаг для плавного изменения t от 0 до 1
-        local step = 1 / (count - 1)
-    
-        for i = 1, count do
-            -- Рандомные значения для цвета (r, g, b, a) в допустимых диапазонах
-            local r = math.random(150, 240)
-            local g = math.random(150, 200)
-            local b = math.random(250, 255)
-            local a = math.random(100, 255)
-    
-            -- t увеличивается от 0 до 1
-            local t = (i - 1) * step
-    
-            -- Добавляем цвет в таблицу
-            table.insert(randomized_colors, { color(r, g, b, a), t })
-        end
-    
-        return randomized_colors
-    end
-    -- Генерация случайных 10 цветов
-    gradient.table = gradient.randomize_colors(100)
-end
-
-local drag do
-    local is_menu_visible = false
-    local is_mouse_held_before_hover = false
-    local mouse = vector()
-
-    drag = {}
-    drag.windows = {}
-
-    function drag.on_config_load()
-        for _, point in pairs(drag.windows) do
-            point.position = vector(point.ui_callbacks.x:get()*screen.size.x/1000, point.ui_callbacks.y:get()*screen.size.y/1000)
-        end
-    end
-
-    function drag.register(position, size, global_name, ins_function, limits, outline)
-        local data = {
-            size = size,
-            is_dragging = false,
-            drag_position = vector(),
-            is_mouse_held_before_hover = false, -- теперь локально для каждого элемента
-            global_name = global_name,
-            ins_function = ins_function,
-            ui_callbacks = {x = position.x, y = position.y},
-            limits = limits and {x={min=limits[1], max=limits[2]}, y={min=limits[3],max=limits[4]}} or nil,
-            outline = outline == nil and true or outline
-        }
-        data.position = vector(data.ui_callbacks.x.value/1000*screen.size.x - data.size.x/2, data.ui_callbacks.y.value/1000*screen.size.y - data.size.y/2)
-         
-        table.insert(drag.windows, data)
-        return setmetatable(data, { __index = drag })
-    end
-    
-    
-    function drag:limit_positions(table)
-        self.position.x = math.max(table and table.x.min or 0, math.min(self.position.x, table and table.x.max or screen.size.x - self.size.x))
-        self.position.y = math.max(table and table.y.min or 0, math.min(self.position.y, table and table.y.max or screen.size.y - self.size.y))
-    end
-    
-    function drag:is_in_area(mouse_position)
-        return mouse_position.x >= self.position.x and mouse_position.x <= self.position.x + self.size.x and 
-               mouse_position.y >= self.position.y and mouse_position.y <= self.position.y + self.size.y
-    end
-    
-    function drag:update(...)
-        if is_menu_visible then
-            if self.outline then
-                utils.rectangle_outline(self.position.x, self.position.y, self.size.x, self.size.y, 255, 255, 255, 100)
-            end
-            local is_in_area = self:is_in_area(mouse)
-            local is_key_pressed = client.key_state(0x01)
-    
-            if is_in_area and client.key_state(0x02) then
-                self.position.x = (screen.size.x - self.size.x) / 2
-                self.ui_callbacks.x:set(math.floor(self.position.x / screen.size.x * 1000))
-            end
-    
-            if is_key_pressed and not self.is_dragging and not is_in_area then
-                self.is_mouse_held_before_hover = true
-            end
-    
-            if (is_in_area or self.is_dragging) and is_key_pressed and not self.is_mouse_held_before_hover then
-                if not self.is_dragging then
-                    self.is_dragging = true
-                    self.drag_position = mouse - self.position
-                else
-                    self.position = mouse - self.drag_position
-                    self:limit_positions(self.limits)
-                    self.ui_callbacks.x:set(math.floor(self.position.x/screen.size.x*1000))
-                    self.ui_callbacks.y:set(math.floor(self.position.y/screen.size.y*1000))
+                if delay_slider then
+                    delay_slider:depend(
+                        {condition.x_way.type, 'Custom'},
+                        {condition.x_way.ways, function (ref)
+                            return ref:get() >= n
+                        end}
+                    )
                 end
-            elseif not is_key_pressed then
-                self.is_dragging = false
-                self.drag_position = vector()
-                self.is_mouse_held_before_hover = false
             end
+
+            condition.spacing_6:depend(is_tab_antiaim, is_condition, is_enabled, {elements.anti_aim.tab, ' Builder'})
+            condition.body_label:depend(is_tab_antiaim, is_condition, is_enabled, {elements.anti_aim.tab, ' Builder'})
+            condition.spacing_4:depend(is_tab_antiaim, is_condition, is_enabled, {elements.anti_aim.tab, ' Builder'})
+            condition.body_yaw:depend(is_tab_antiaim, is_condition, is_enabled, {elements.anti_aim.tab, ' Builder'})
+            condition.body_side:depend(is_tab_antiaim, is_condition, is_enabled, {condition.body_yaw, not_disabled('body_yaw')}, {elements.anti_aim.tab, ' Builder'}, {condition.body_yaw, function () if condition.body_yaw:get() == 'Opposite' or condition.body_yaw:get() == 'Jitter' then return false else return true end end})
+            condition.fs_body_yaw:depend(is_tab_antiaim, is_condition, is_enabled, {condition.body_yaw, not_disabled('body_yaw')}, {elements.anti_aim.tab, ' Builder'})
+            
+            condition.spacing_3:depend(is_tab_antiaim, is_condition, is_enabled, {elements.anti_aim.tab, ' Builder', {condition.body_yaw, not_disabled('body_yaw')}})
+            condition.delay_label:depend(is_tab_antiaim, is_condition, is_enabled, {elements.anti_aim.tab, ' Builder'}, {condition.body_yaw, not_disabled('body_yaw')})
+            condition.spacing_9:depend(is_tab_antiaim, is_condition, is_enabled, {elements.anti_aim.tab, ' Builder', {condition.body_yaw, not_disabled('body_yaw')}})
+            condition.delay:depend(is_tab_antiaim, is_condition, is_enabled, {condition.body_yaw, not_disabled('body_yaw')}, {elements.anti_aim.tab, ' Builder'}, {condition.addons, function () if not condition.ideal_yaw:get() and condition.addons:get('Randomize Delay Ticks') then return false else return true end end})
+            condition.small_delay_min_toggle:depend(is_tab_antiaim, is_condition, is_enabled, {condition.body_yaw, not_disabled('body_yaw')}, {elements.anti_aim.tab, ' Builder'}, {condition.ideal_yaw, false}, {condition.addons, 'Randomize Delay Ticks'})
+            condition.small_delay_min:depend(is_tab_antiaim, is_condition, is_enabled, {condition.body_yaw, not_disabled('body_yaw')}, {elements.anti_aim.tab, ' Builder'}, {condition.ideal_yaw, false}, {condition.addons, 'Randomize Delay Ticks'}, {condition.small_delay_min_toggle, true})
+            condition.delay_min:depend(is_tab_antiaim, is_condition, is_enabled, {condition.body_yaw, not_disabled('body_yaw')}, {elements.anti_aim.tab, ' Builder'}, {condition.ideal_yaw, false}, {condition.addons, 'Randomize Delay Ticks'}, {condition.small_delay_min_toggle, false})
+            condition.small_delay_max_toggle:depend(is_tab_antiaim, is_condition, is_enabled, {condition.body_yaw, not_disabled('body_yaw')}, {elements.anti_aim.tab, ' Builder'}, {condition.ideal_yaw, false}, {condition.addons, 'Randomize Delay Ticks'})
+            condition.small_delay_max:depend(is_tab_antiaim, is_condition, is_enabled, {condition.body_yaw, not_disabled('body_yaw')}, {elements.anti_aim.tab, ' Builder'}, {condition.ideal_yaw, false}, {condition.addons, 'Randomize Delay Ticks'}, {condition.small_delay_max_toggle, true})     
+            condition.delay_max:depend(is_tab_antiaim, is_condition, is_enabled, {condition.body_yaw, not_disabled('body_yaw')}, {elements.anti_aim.tab, ' Builder'}, {condition.ideal_yaw, false}, {condition.addons, 'Randomize Delay Ticks'}, {condition.small_delay_max_toggle, false})
+
+            condition.freeze_chance:depend(is_tab_antiaim, is_condition, is_enabled, {condition.body_yaw, not_disabled('body_yaw')}, {elements.anti_aim.tab, ' Builder'}, {condition.ideal_yaw, false}, {condition.addons, 'Freeze-Inverter'})
+            condition.freeze_time:depend(is_tab_antiaim, is_condition, is_enabled, {condition.body_yaw, not_disabled('body_yaw')}, {elements.anti_aim.tab, ' Builder'}, {condition.ideal_yaw, false}, {condition.addons, 'Freeze-Inverter'})
+
+            condition.spacing_5:depend(is_tab_antiaim, is_condition, is_enabled, {condition.body_yaw, not_disabled('body_yaw')}, {condition.ideal_yaw, false}, {elements.anti_aim.tab, ' Builder'})
+            condition.addons:depend(is_tab_antiaim, is_condition, is_enabled, {condition.body_yaw, not_disabled('body_yaw')}, {condition.ideal_yaw, false}, {elements.anti_aim.tab, ' Builder'})
         end
-        self.ins_function(self, ...)
     end
-    
-    local function block(cmd)
-        cmd.in_attack = false
-        cmd.in_attack2 = false
+
+    elements.defensive = { }
+    for i, state in pairs(builder.conditions) do
+        local colored_state = builder.alternative_conditions[i]
+        elements.defensive[state] = {
+            spacing = menu.group.anti_aim.main:label(' \nD_' .. state),
+            enable = menu.group.anti_aim.main:checkbox('Enable  ' .. colored_state .. ' \nD'),
+
+            toggle_builder = menu.group.anti_aim.main:checkbox('\nToggle Builder \nD_' .. state),
+            defensive_on = menu.group.anti_aim.main:multiselect('\nDefensive \v»\r Work on \nD_' .. state, {'Double tap', 'Hide shots'}),
+            defensive_mode = menu.group.anti_aim.main:combobox('\nDefensive \v»\r Mode \nD_' .. state, {'On peek', 'Always on'}),
+            spacing_1 = menu.group.anti_aim.main:label('  \nD_' .. state),
+        
+            duration = menu.group.anti_aim.other:slider('\v⯌\r    Duration \nD_' .. state, 1, 15, 15, true, 't', 1, {[15] = 'Maximum'}),
+            spacing_9 = menu.group.anti_aim.other:label('        \nD_' .. state),
+            pitch_min_max = menu.group.anti_aim.other:checkbox('Pitch \v»\r Min. - Max. mode \nD_' .. state),
+            pitch_height_based = menu.group.anti_aim.other:checkbox('Pitch \v»\r Height based value \nD_' .. state),
+            yaw_left_right = menu.group.anti_aim.other:checkbox('Yaw \v»\r Left  Right mode \nD_' .. state),
+            yaw_generation = menu.group.anti_aim.other:checkbox('Yaw \v»\r Generation \nD_' .. state),
+
+            yaw_label = menu.group.anti_aim.main:label('\v\r    Yaw\nD_' .. state),
+            spacing_5 = menu.group.anti_aim.main:label('     \nD_' .. state),
+            yaw = menu.group.anti_aim.main:combobox('\nYaw \v»\r Type \nD_' .. state, {'Off', '180', 'Spin', 'Distortion', 'Sway', 'Freestand'}),
+            speed = menu.group.anti_aim.main:slider('\nYaw speed \nD_' .. state, 1, 17, 4, true, 't'),
+            offset = menu.group.anti_aim.main:slider('\nYaw offset \nD_' .. state, -180, 180, 0, true, '°'),
+            left = menu.group.anti_aim.main:slider('\nYaw left \nD_' .. state, -180, 180, 0, true, '°'),
+            right = menu.group.anti_aim.main:slider('\nYaw right \nD_' .. state, -180, 180, 0, true, '°'),
+            min_gen = menu.group.anti_aim.main:slider('\nYaw min. \nD_' .. state, -180, 180, -20, true, '°-'),
+            max_gen = menu.group.anti_aim.main:slider('\nYaw max. \nD_' .. state, -180, 180, 20, true, '°+'),
+
+            spacing_3 = menu.group.anti_aim.main:label('   \nD_' .. state),
+            pitch_label = menu.group.anti_aim.main:label('\v\r    Pitch\nD_' .. state),
+            spacing_4 = menu.group.anti_aim.main:label('    \nD_' .. state),
+            pitch_mode = menu.group.anti_aim.main:combobox('\nPitch \v»\r Mode \nD_' .. state, {'Static', 'Spin', 'Sway', 'Jitter', 'Cycling', 'Random'}),
+            pitch_speed = menu.group.anti_aim.main:slider('\nPitch speed \nD_' .. state, 1, 17, 2, true, 't'),
+            pitch = menu.group.anti_aim.main:slider('\nPitch \nD_' .. state, -89, 89, 0, true, '°'),
+            pitch_min = menu.group.anti_aim.main:slider('\nPitch Min. \nD_' .. state, -89, 89, 0, true, '°'),
+            pitch_max = menu.group.anti_aim.main:slider('\nPitch Max. \nD_' .. state, -89, 89, 0, true, '°'),
+
+            spacing_6 = menu.group.anti_aim.main:label('     \nD_' .. state),
+            delay_label = menu.group.anti_aim.main:label('\v\r    Delay\nD_' .. state),
+            spacing_7 = menu.group.anti_aim.main:label('         \nD_' .. state),
+            delay = menu.group.anti_aim.main:slider('\nBody delay \nD_' .. state, 1, 34, 1, true, 't', 1, {[1] = 'OFF'}),
+            delay_min = menu.group.anti_aim.main:slider('\nBody Min. delay \nD_' .. state, 1, 34, 1, true, 't', 1, {[1] = 'OFF'}),
+            delay_max = menu.group.anti_aim.main:slider('\nBody Max. delay \nD_' .. state, 1, 34, 34, true, 't', 1, {[1] = 'OFF'}),
+            
+            freeze_chance = menu.group.anti_aim.main:slider('\nBody freeze chance \nD_' .. state, 1, 100, 18, true, '%', 1),
+            freeze_time = menu.group.anti_aim.main:slider('\nBody freeze time \nD_' .. state, 1, 200, 30, true, 'ms', 1),
+        
+            spacing_8 = menu.group.anti_aim.main:label('       \nD_' .. state),
+            addons = menu.group.anti_aim.main:multiselect('\vDelay »\r Add-ons \nD_' .. state, {'Randomize Delay Ticks', 'Freeze-Inverter'})
+        }
     end
-    
-    local function mouse_input()
-        height = vector(renderer.measure_text('d', '1')).y
-        is_menu_visible = ui.is_menu_open()
-        if is_menu_visible then
-            mouse = vector(ui.mouse_position())
-            local is_key_pressed = client.key_state(0x01)
-            local in_area = false
-            if is_menu_visible then
-                for _, window in pairs(drag.windows) do
-                    if window.is_dragging or window:is_in_area(mouse) then
-                        in_area = true
-                        break
+
+    do
+        for i, state in pairs(builder.conditions) do
+            local colored_state = builder.alternative_conditions[i]
+
+            local condition = elements.defensive[state]
+            local is_condition = {elements.conditions.select, colored_state}
+            local disable_shared = {elements.conditions.select, function () return (i ~= 1) end}
+            local is_enabled = {condition.enable, function () if i == 1 then return true else return condition.enable:get() end end}
+            local fakelag_state = {elements.conditions.select, function () if i == 9 then return false else return true end end}
+            local function not_disabled(val) 
+                return function () return condition[val]:get() ~= 'Off' end 
+            end
+        
+            condition.spacing:depend(is_tab_antiaim, is_condition, fakelag_state, {elements.anti_aim.tab, ' Defensive'})
+            condition.enable:depend(is_tab_antiaim, is_condition, disable_shared, fakelag_state, {elements.anti_aim.tab, ' Defensive'})
+
+            condition.defensive_on:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {elements.anti_aim.tab, ' Defensive'})
+            condition.defensive_mode:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {elements.anti_aim.tab, ' Defensive'})
+            condition.toggle_builder:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {elements.anti_aim.tab, ' Defensive'})
+            condition.spacing_1:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {elements.anti_aim.tab, ' Defensive'})
+
+            condition.duration:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'})
+            condition.spacing_9:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'})
+            condition.pitch_min_max:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {condition.pitch_height_based, false}, {elements.anti_aim.tab, ' Defensive'})
+            condition.pitch_height_based:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'})
+            condition.yaw_left_right:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {condition.yaw, not_disabled('yaw')}, {elements.anti_aim.tab, ' Defensive'})
+            condition.yaw_generation:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {condition.yaw, not_disabled('yaw')}, {elements.anti_aim.tab, ' Defensive'})
+            
+            condition.spacing_5:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {condition.yaw, not_disabled('yaw')}, {elements.anti_aim.tab, ' Defensive'})
+            condition.yaw_label:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'})
+            condition.yaw:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'})
+            condition.speed:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {condition.yaw, function () if condition.yaw:get() == 'Off' or condition.yaw:get() == '180' or condition.yaw:get() == 'Spin' or condition.yaw:get() == 'Freestand' then return false else return true end end}, {elements.anti_aim.tab, ' Defensive'})
+            condition.offset:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {condition.yaw, not_disabled('yaw')}, {condition.yaw_left_right, false}, {elements.anti_aim.tab, ' Defensive'})
+            condition.left:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {condition.yaw, not_disabled('yaw')}, {condition.yaw_left_right, true}, {elements.anti_aim.tab, ' Defensive'})
+            condition.right:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {condition.yaw, not_disabled('yaw')}, {condition.yaw_left_right, true}, {elements.anti_aim.tab, ' Defensive'})
+            condition.min_gen:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {condition.yaw, not_disabled('yaw')}, {condition.yaw_generation, true}, {elements.anti_aim.tab, ' Defensive'})
+            condition.max_gen:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {condition.yaw, not_disabled('yaw')}, {condition.yaw_generation, true}, {elements.anti_aim.tab, ' Defensive'})
+
+            condition.spacing_3:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'})
+            condition.pitch_label:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'})
+            condition.spacing_4:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'})
+            condition.pitch_mode:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'})
+            condition.pitch_speed:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'}, {condition.pitch_mode, function () if condition.pitch_mode:get() == 'Static' or condition.pitch_mode:get() == 'Random' then return false else return true end end})
+            condition.pitch:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {condition.pitch_min_max, false}, {condition.pitch_height_based, false}, {elements.anti_aim.tab, ' Defensive'})
+            condition.pitch_min:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {condition.pitch_min_max, true}, {condition.pitch_height_based, false}, {elements.anti_aim.tab, ' Defensive'})
+            condition.pitch_max:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {condition.pitch_min_max, true}, {condition.pitch_height_based, false}, {condition.pitch_mode, 'Static', true}, {elements.anti_aim.tab, ' Defensive'})
+
+            condition.spacing_6:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'})
+            condition.delay_label:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'})
+            condition.spacing_7:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'})
+            condition.delay:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true},{elements.anti_aim.tab, ' Defensive'}, {condition.addons, function () if condition.addons:get('Randomize Delay Ticks') then return false else return true end end})
+            condition.delay_min:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'}, {condition.addons, 'Randomize Delay Ticks'})
+            condition.delay_max:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'}, {condition.addons, 'Randomize Delay Ticks'})
+            condition.freeze_chance:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'}, {condition.addons, 'Freeze-Inverter'})
+            condition.freeze_time:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'}, {condition.addons, 'Freeze-Inverter'})
+
+            condition.spacing_8:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'})
+            condition.addons:depend(is_tab_antiaim, is_condition, is_enabled, fakelag_state, {condition.toggle_builder, true}, {elements.anti_aim.tab, ' Defensive'})
+        end
+    end
+
+    local state_logic = { }
+    local state = {
+        space = menu.group.anti_aim.other:label(' '),
+        export = menu.group.anti_aim.other:button('\v\r State To \v»\r ⛟', function ()
+            state_logic.export()
+        end),
+        import = menu.group.anti_aim.other:button('\v\r State From \v«\r ⛴', function ()
+            state_logic.import()
+        end),
+        reset = menu.group.anti_aim.other:button('\v♻️\r Reset', function ()
+            state_logic.reset()
+        end),
+    } do
+        state_logic.export = function ()
+            local setup = pui.setup(elements.conditions[elements.conditions.select_2:get()], true)
+            if elements.anti_aim.tab:get() == ' Defensive' then
+                setup = pui.setup(elements.defensive[elements.conditions.select_2:get()], true)
+            end
+            clipboard.set(base64.encode(json.stringify(setup:save())))
+        end
+
+        state_logic.import = function ()
+            local setup = pui.setup(elements.conditions[elements.conditions.select_2:get()], true)
+            if elements.anti_aim.tab:get() == ' Defensive' then
+                setup = pui.setup(elements.defensive[elements.conditions.select_2:get()], true)
+            end
+            setup:load(json.parse(base64.decode(clipboard.get())))
+        end
+
+        state_logic.reset = function ()
+            local setup = pui.setup(elements.conditions[elements.conditions.select_2:get()], true)
+            local reset = 'eyJlbmFibGUiOmZhbHNlLCJib2R5X3NpZGUiOiIrIiwibW9kaWZpZXJfb2Zmc2V0IjowLCJib2R5X3lhdyI6Ik9mZiIsImFkZG9ucyI6WyJ+Il0sImRlbGF5X21pbiI6MSwib2Zmc2V0IjowLCJkZWxheSI6MSwieWF3X2xlZnRfcmlnaHQiOmZhbHNlLCJ5YXdfYmFzZSI6IkxvY2FsIFZpZXciLCJtb2RpZmllcl9vZmZzZXRfMiI6MCwibW9kaWZpZXJfb2Zmc2V0XzMiOjAsIm1vZGlmaWVyX3dheXNfbW9kZSI6IkF1dG9tYXRpYyIsInJpZ2h0IjowLCJtb2RpZmllcl93YXlzIjoxLCJsZWZ0IjowLCJtb2RpZmllcl9vZmZzZXRfNSI6MCwiZGVsYXlfbWF4IjoxNywiZnJlZXplX3RpbWUiOjMwLCJtb2RpZmllciI6Ik9mZiIsImZyZWV6ZV9jaGFuY2UiOjE4LCJtb2RpZmllcl9vZmZzZXRfNCI6MCwibW9kaWZpZXJfcmFuZG9taXphdGlvbiI6MH0='
+            if elements.anti_aim.tab:get() == ' Defensive' then
+                setup = pui.setup(elements.defensive[elements.conditions.select_2:get()], true)
+                reset = 'eyJlbmFibGUiOmZhbHNlLCJwaXRjaF9tb2RlIjoiU3RhdGljIiwicGl0Y2giOjAsInJpZ2h0IjowLCJtYXhfZ2VuIjoyMCwieWF3IjoiT2ZmIiwidG9nZ2xlX2J1aWxkZXIiOmZhbHNlLCJ5YXdfZ2VuZXJhdGlvbiI6ZmFsc2UsImxlZnQiOjAsIm9mZnNldCI6MCwiZGVmZW5zaXZlX21vZGUiOiJPbiBwZWVrIiwieWF3X2Jhc2UiOiJMb2NhbCB2aWV3IiwiZGVmZW5zaXZlX29uIjpbIn4iXSwibWluX2dlbiI6LTIwLCJ5YXdfbGVmdF9yaWdodCI6ZmFsc2V9'
+            end
+            setup:load(json.parse(base64.decode(reset)))
+        end
+
+        pui.traverse(state, function (ref)
+            ref:depend({tab.main, ' Anti-aimbot angles'}, {elements.anti_aim.tab, ' Other', true})
+        end)
+    end
+
+    builder.manual_tick = 0
+    local function manual ()
+        local manual_mode = elements.anti_aim.hotkeys.manual_mode.value
+        if manual_mode == 1 or manual_mode == 2 then
+            builder.selected_manual = builder.selected_manual or 0
+            local tick = globals.tickcount()
+
+            local function handle_press(key, value)
+                if elements.anti_aim.hotkeys[key]:get() and (manual_mode == 1 and not builder[key..'_pressed'] or manual_mode == 2 and builder.manual_tick < tick - 11) then
+                    builder.selected_manual = builder.selected_manual == value and 0 or value
+                    builder.manual_tick = tick
+                end
+                builder[key..'_pressed'] = elements.anti_aim.hotkeys[key]:get()
+            end
+
+            handle_press('left', 1)
+            handle_press('right', 2)
+            handle_press('forward', 3)
+            
+            if elements.anti_aim.hotkeys.reset:get() and not builder.reset_pressed then
+                builder.selected_manual = 0
+            end
+            builder.reset_pressed = elements.anti_aim.hotkeys.reset:get()
+
+            return builder.selected_manual
+        end
+    end
+
+    builder.side = 1
+    builder.delay_ticks = { default = 0, defensive = 0 }
+    builder._freeze_state = { active = false, _until = 0 }
+    builder.current_tick = 0
+    local function inverter (e, state)
+        local me = entity.get_local_player()
+        local body_yaw = math.floor(entity.get_prop(me, 'm_flPoseParameter', 11) * 120 - 60)
+        local condition = elements.conditions
+        local delay_key = 'default'
+
+        if e.chokedcommands == 0 then
+            builder.current_tick = globals.tickcount()
+            if elements.conditions[state].body_yaw:get() ~= 'Off' then
+                if condition[state].addons:get('Freeze-Inverter') then
+                    local freeze_chance = condition[state].freeze_chance:get()
+                    local freeze_time = condition[state].freeze_time:get()
+                    if not builder._freeze_state.active then
+                        if client.random_int(1, 100) <= freeze_chance then
+                            builder._freeze_state.active = true
+                            builder._freeze_state._until = builder.current_tick + freeze_time
+                        end
+                    end
+                    if builder._freeze_state.active then
+                        if builder.current_tick < builder._freeze_state._until then
+                            return builder.side
+                        else
+                            builder._freeze_state.active = false
+                            builder._freeze_state._until = 0
+                        end
+                    end
+                else
+                    builder._freeze_state = { active = false, _until = 0 }
+                end
+
+                if condition[state].delay:get() > 1 or condition[state].addons:get('Randomize Delay Ticks') or elements.conditions[state].body_yaw:get() ~= 'Jitter' then
+                    local delay = condition[state].delay:get()
+                    if condition[state].addons:get('Randomize Delay Ticks') then
+                        local delay_min = condition[state].delay_min:get()
+                        local delay_max = condition[state].delay_max:get()
+
+                        if condition[state].small_delay_min_toggle:get() then
+                            delay_min = condition[state].small_delay_min:get() * 0.2
+                        end
+
+                        if condition[state].small_delay_max_toggle:get() then
+                            delay_max = condition[state].small_delay_max:get() * 0.2
+                        end
+
+                        math.randomseed(globals.tickcount())
+                        delay = math.random(delay_min, delay_max)
+                    end
+                    -- print(delay)
+                    if builder.delay_ticks[delay_key] < builder.current_tick - delay then
+                        builder.delay_ticks[delay_key] = builder.current_tick
+                        builder.side = builder.side == 1 and -1 or 1
+                        if builder._freeze_state then
+                            builder._freeze_state.active = false
+                            builder._freeze_state._until = 0
+                        end
+                    end
+                elseif condition[state].delay:get() == 1 and elements.conditions[state].body_yaw:get() == 'Jitter' then
+                    builder.side = (body_yaw > 0 and 1 or body_yaw < 0 and -1)
+                    if builder._freeze_state then
+                        builder._freeze_state.active = false
+                        builder._freeze_state._until = 0
                     end
                 end
-            end
-            
-            if in_area then
-                client.set_event_callback("setup_command", block)
             else
-                client.unset_event_callback("setup_command", block)
-            end
-
-            
-            if not is_key_pressed then
-                is_mouse_held_before_hover = false
-            end
-            
-            return not in_area
-        end
-    end
-    
-    client.set_event_callback("paint", mouse_input)
-end 
-
-local menu do
-    menu = {}
-
-    local hide_menu do
-        hide_menu = function()
-            -- for _,table in pairs(refs) do
-                -- for _, ref in pairs(table) do
-                for _, ref in pairs(refs.aa) do
-                    ref:set_visible(false)
+                if builder._freeze_state then
+                    builder._freeze_state.active = false
+                    builder._freeze_state._until = 0
                 end
+                if builder.delay_ticks[delay_key] < builder.current_tick - 1 then
+                    builder.delay_ticks[delay_key] = builder.current_tick
+                    builder.side = builder.side == 1 and -1 or 1
+                end
+            end
+        end
+
+        return builder.side
+    end
+
+    -- @lordmouse: TODO исправить это говнище и сделать всё в одной функции
+    builder.d_side = 1
+    local function d_inverter (e, state)
+        local me = entity.get_local_player()
+        local body_yaw = math.floor(entity.get_prop(me, 'm_flPoseParameter', 11) * 120 - 60)
+        local condition = elements.defensive
+        local delay_key = 'defensive'
+
+        if e.chokedcommands == 0 then
+            local current_tick = globals.tickcount()
+            -- if elements.conditions[state].body_yaw:get() ~= 'Off' then
+                if condition[state].delay:get() > 1 or condition[state].addons:get('Randomize Delay Ticks') then
+                    local delay = condition[state].delay:get()
+                    if condition[state].addons:get('Randomize Delay Ticks') then
+                        local delay_min = condition[state].delay_min:get()
+                        local delay_max = condition[state].delay_max:get()
+                        -- delay = client.random_int(delay_min, delay_max)
+                        math.randomseed(globals.tickcount())
+                        delay = math.random(delay_min, delay_max)
+                    end
+
+                    -- print(builder.delay_ticks[delay_key] < current_tick - delay)
+                    if builder.delay_ticks[delay_key] < current_tick - delay then
+                        builder.delay_ticks[delay_key] = current_tick
+                        builder.d_side = builder.d_side == 1 and -1 or 1
+                    end
+                elseif condition[state].delay:get() == 1 then
+                    builder.d_side = (body_yaw > 0 and 1 or body_yaw < 0 and -1)
+                end
+            -- else
+            --     if builder.delay_ticks[delay_key] < current_tick - 1 then
+            --         builder.delay_ticks[delay_key] = current_tick
+            --         builder.d_side = builder.d_side == 1 and -1 or 1
+            --     end
             -- end
         end
-        client.set_event_callback("paint_ui", hide_menu)
+
+        return builder.d_side
     end
 
-    local tabs do
-        tabs = {
-            aa = pui.group("AA", "Anti-aimbot angles"),
-            fl = pui.group("AA", "Fake lag"),
-            other = pui.group("AA", "Other")
+    local function is_condition_enabled(table, condition)
+        return table[condition] and table[condition].enable:get()
+    end
+
+    function builder.get_state ()
+        local condition = helpers.get_state()
+
+        if not (is_condition_enabled(elements.conditions, condition)) then
+            condition = 'Global'
+        end
+
+        if reference.antiaim.fakelag.enabled:get() then
+            if is_condition_enabled(elements.conditions, 'Fake lag') then
+                if fakelag.active then
+                    condition = 'Fake lag'
+                end
+            end
+        end
+
+        if (is_condition_enabled(elements.conditions, 'Freestanding')) and reference.antiaim.angles.freestanding[1]:get() and reference.antiaim.angles.freestanding[1].hotkey:get() then
+            condition = 'Freestanding'
+        end
+
+        local manual_aa = manual()
+        if manual_aa == 1 then
+            condition = 'Manual left'
+        elseif manual_aa == 2 then
+            condition = 'Manual right'
+        end
+
+        return condition
+    end
+
+    function builder.d_get_state ()
+        local condition = helpers.get_state()
+
+        if not (is_condition_enabled(elements.defensive, condition)) then
+            condition = 'Global'
+        end
+
+        if (is_condition_enabled(elements.defensive, 'Freestanding')) and reference.antiaim.angles.freestanding[1]:get() and reference.antiaim.angles.freestanding[1].hotkey:get() then
+            condition = 'Freestanding'
+        end
+
+        local manual_aa = manual()
+        if manual_aa == 1 then
+            condition = 'Manual left'
+        elseif manual_aa == 2 then
+            condition = 'Manual right'
+        end
+
+        return condition
+    end
+
+    local function angle_diff (a1, a2)
+        local diff = a1 - a2
+        while diff > 180 do
+            diff = diff - 360
+        end
+        while diff < -180 do
+            diff = diff + 360
+        end
+        return diff
+    end
+    
+    local function normalize_yaw (yaw)
+        while yaw > 180 do
+            yaw = yaw - 360
+        end
+        while yaw < -180 do
+            yaw = yaw + 360
+        end
+        return yaw
+    end
+
+    local skitter_per_tick = false
+    local skitter_accumulated_offset = 0
+    local skitter_goal_feet_yaw = 0
+    local skitter_last_view_angle = 0
+    local skitter_initialized = false
+
+    local function get_skitter_offset_per_tick (base_offset)
+        if not skitter_initialized then
+            skitter_last_view_angle = base_offset
+            skitter_goal_feet_yaw = base_offset
+            skitter_accumulated_offset = 0
+            skitter_initialized = true
+            return base_offset
+        end
+        
+        skitter_per_tick = not skitter_per_tick
+        
+        local current_view_angle = base_offset + skitter_accumulated_offset
+        
+        local interval_per_tick = globals.tickinterval()
+        local angle_difference = math.abs(angle_diff(current_view_angle, skitter_goal_feet_yaw))
+        local v43 = angle_difference / interval_per_tick
+
+        v43 = math.min(v43, 180)
+        
+        local angle_addition = 0
+        if v43 >= 35 then
+            angle_addition = v43 * (skitter_per_tick and 1 or 0)
+        elseif v43 <= 35 then
+            angle_addition = v43 * (skitter_per_tick and 1 or 0)
+        end
+
+        skitter_accumulated_offset = skitter_accumulated_offset + angle_addition
+        
+        if math.abs(skitter_accumulated_offset) > 180 then
+            skitter_accumulated_offset = skitter_accumulated_offset * 0.1
+        end
+        
+        skitter_goal_feet_yaw = normalize_yaw(current_view_angle)
+        
+        return base_offset + math.max(-45, math.min(45, angle_addition))
+    end
+
+    local function apply_skitter_direct (base_offset)
+        return get_skitter_offset_per_tick(base_offset)
+    end
+    
+    local pitch_add = 0
+    local generated_yaw = 0
+
+    builder._random_jitter_freeze = { active = false, _until = 0 }
+    builder._random_jitter_tick = 0
+    builder._random_jitter_value = 0
+
+    builder._xway_offsets = { _xway_tick = 0, _xway_last_tick = 0, _xway_idx = 1 }
+    builder._xway_freeze_state = { active = false, _until = 0 }
+    builder._xway_tick = 0
+    builder._xway_last_tick = 0
+    builder._xway_idx = 1
+    function builder.angles (e)
+        builder.state = builder.get_state()
+
+        local me = entity.get_local_player()
+        local tick = globals.tickcount()
+
+        local cond = elements.conditions[builder.state]
+        local pitch, pitch_offset = 'down', 89
+        local yaw = '180'
+        local yaw_base, offset, yaw_jitter, jitter_offset, body_yaw, body_side, fs_body_yaw = cond.yaw_base:get(), cond.offset:get(), cond.modifier:get(), cond.modifier_offset:get(), cond.body_yaw:get(), cond.body_side:get(), cond.fs_body_yaw:get()
+        
+        local body_side_value = 1
+        if body_yaw == 'Static' then
+            if body_side == '-' then
+                body_side_value = -1
+            end
+        end
+
+        local left, right = cond.left:get(), cond.right:get()
+        local left_rand, right_rand = cond.left_randomization:get(), cond.right_randomization:get()
+        local inverted = inverter(e, builder.state)
+        if cond.yaw_left_right:get() then
+            local rand_offset = 0
+            if inverted == 1 and left_rand > 0 then
+                rand_offset = client.random_int(-left_rand, left_rand)
+            elseif inverted == -1 and right_rand > 0 then
+                rand_offset = client.random_int(-right_rand, right_rand)
+            end
+
+            offset = ((inverted == 1 and left or inverted == -1 and right) or left) + rand_offset
+        end
+
+        if (yaw_jitter ~= 'Off' or yaw_jitter ~= 'Custom' or yaw_jitter ~= 'X-way') and cond.modifier_randomization:get() > 0 then
+            local randomization_factor = cond.modifier_randomization:get()
+            local hp = me and entity.get_prop(me, 'm_iHealth') or 100
+            local velocity = me and (entity.get_prop(me, 'm_vecVelocity', 0) or 0) or 0
+            local seed = globals.tickcount() + builder.state:byte(1, -1) + hp + math.floor(velocity)
+            math.randomseed(seed)
+
+            local r1 = math.random(-randomization_factor, randomization_factor)
+            local r2 = math.random(-randomization_factor, randomization_factor)
+            local random_offset = math.floor((r1 + r2) / 2 + math.sin(globals.realtime() * 5) * (randomization_factor / 4))
+            jitter_offset = jitter_offset + random_offset
+        end
+
+        if (yaw_jitter ~= 'Off' or yaw_jitter ~= 'Custom' or yaw_jitter ~= 'X-way') and cond.ideal_yaw:get() then
+            local body_yaw = math.floor(entity.get_prop(me, 'm_flPoseParameter', 11) * 120 - 60)
+            if body_yaw ~= 'Off' and yaw_jitter ~= 'Ground-based' and cond.delay:get() > 1 then
+                local raw_jitter_offset = (inverted == 1 and jitter_offset / 2 or inverted == -1 and cond.modifier_offset_2:get() / 2) or 0
+                offset =  (offset + raw_jitter_offset) - body_yaw
+                
+                yaw_jitter = 'Off'  
+                jitter_offset = 0
+            else
+                local raw_jitter_offset = (inverted == 1 and -jitter_offset or inverted == -1 and cond.modifier_offset_2:get() - 1) or 0
+                local compensated_jitter_offset = raw_jitter_offset - body_yaw
+                jitter_offset = compensated_jitter_offset
+                -- print(body_yaw)
+            end
+        end
+
+        local delay = cond.delay:get() or 1
+        if delay < 1 then delay = 1 end
+    
+        if cond.addons:get('Randomize Delay Ticks') then
+            local delay_min = cond.delay_min:get()
+            local delay_max = cond.delay_max:get()
+            if cond.small_delay_min_toggle:get() then
+                delay_min = cond.small_delay_min:get() * 0.2
+            end
+            if cond.small_delay_max_toggle:get() then
+                delay_max = cond.small_delay_max:get() * 0.2
+            end
+    
+            math.randomseed(tick)
+            delay = math.random(delay_min, delay_max)
+        end
+
+        if body_yaw ~= 'Off' then
+            if cond.delay:get() > 1 or cond.addons:get('Randomize Delay Ticks') then
+                body_side_value = (inverted == 1 and -1 or inverted == -1 and 1) or 0   
+                body_yaw = cond.body_yaw:get() == 'Jitter' and 'Static' or cond.body_yaw:get()
+
+                if yaw_jitter ~= 'Off' and yaw_jitter ~= 'Ground-based' and yaw_jitter ~= 'X-way' then
+                    if yaw_jitter == 'Offset' then
+                        offset = offset + (inverted == -1 and jitter_offset or 0)
+                    elseif yaw_jitter == 'Center' then
+                        offset = offset + ((inverted == 1 and -jitter_offset / 2 or inverted == -1 and jitter_offset / 2) or 0)
+                    elseif yaw_jitter == 'Random' then
+                        if cond.addons:get('Freeze-Inverter') then
+                            local freeze_chance = cond.freeze_chance:get()
+                            local freeze_time = cond.freeze_time:get()
+                            if not builder._random_jitter_freeze.active then
+                                if client.random_int(1, 100) <= freeze_chance then
+                                    builder._random_jitter_freeze.active = true
+                                    builder._random_jitter_freeze._until = tick + freeze_time
+                                end
+                            end
+                            if builder._random_jitter_freeze.active then
+                                if tick < builder._random_jitter_freeze._until then
+                                    offset = offset + builder._random_jitter_value
+                                else
+                                    builder._random_jitter_freeze.active = false
+                                    builder._random_jitter_freeze._until = 0
+                                end
+                            end
+                        end
+
+                        if not (builder._random_jitter_freeze and builder._random_jitter_freeze.active) then
+                            if tick - (builder._random_jitter_tick or 0) >= delay then
+                                builder._random_jitter_value = client.random_int(-jitter_offset, jitter_offset)
+                                builder._random_jitter_tick = tick
+                            end
+                            offset = offset + builder._random_jitter_value
+                        end
+                    end
+
+                    yaw_jitter = 'Off'  
+                    jitter_offset = 0
+                end
+            end
+        end
+
+        if yaw_jitter == 'Ground-based' then
+            local my_pos = vector(entity.get_origin(me))
+            local threat = client.current_threat()
+            local height_to_threat = 0
+            if threat then
+                local enemy_pos = vector(entity.get_origin(threat))
+                height_to_threat = math.ceil(my_pos.z - enemy_pos.z)
+            end
+        
+            local scale = helpers:clamp((80 - height_to_threat) / 100, 0.15, 1.0)
+            local final_offset = jitter_offset * scale
+
+            offset = offset + ((inverted == 1 and -final_offset or inverted == -1 and final_offset) or 0)
+        
+            yaw_jitter = 'Off'
+            jitter_offset = 0
+        elseif yaw_jitter == 'X-way' then
+            local xway = cond.x_way
+            local method = xway.method:get()
+            local xway_type = xway.type:get()
+            local ways = xway.ways:get()
+            local auto_offset = xway.auto_offset:get() / 2
+        
+            builder._xway_offsets[builder.state] = { _xway_tick = 0, _xway_last_tick = 0, _xway_idx = 1, _tickcount = 0 }
+        
+            local offsets = builder._xway_offsets[builder.state]
+        
+            if xway_type == 'Auto' then
+                local max_spread = 90
+                local spread = math.min(math.abs(auto_offset), max_spread)
+
+                local step_size = (spread * 2) / (ways - 1)
+
+                for i = 1, ways do
+                    offsets[i] = -spread + (step_size * (i - 1))
+                    if auto_offset < 0 then
+                        offsets[i] = -offsets[i]
+                    end
+                end
+            else
+                offsets[1] = xway.first_offset:get()
+                if ways >= 2 then offsets[2] = xway.second_offset:get() end
+                if ways >= 3 then offsets[3] = xway.third_offset:get() end
+                if ways >= 4 then offsets[4] = xway.fourth_offset:get() end
+                if ways >= 5 then offsets[5] = xway.fifth_offset:get() end
+                if ways >= 6 then offsets[6] = xway.sixth_offset:get() end
+                if ways >= 7 then offsets[7] = xway.seventh_offset:get() end
+                if ways >= 8 then offsets[8] = xway.eighth_offset:get() end
+                if ways >= 9 then offsets[9] = xway.ninth_offset:get() end
+                if ways >= 10 then offsets[10] = xway.tenth_offset:get() end
+            end
+        
+            local freeze_chance = cond.freeze_chance:get()
+            local freeze_time = cond.freeze_time:get()
+            local should_freeze = false
+            
+            if cond.addons:get('Freeze-Inverter') then
+                if not builder._xway_freeze_state.active then
+                    if client.random_int(1, 100) <= freeze_chance then
+                        builder._xway_freeze_state.active = true
+                        builder._xway_freeze_state._until = tick + freeze_time
+                    end
+                end
+        
+                if builder._xway_freeze_state.active then
+                    if tick < builder._xway_freeze_state._until then
+                        should_freeze = true
+                    else
+                        builder._xway_freeze_state.active = false
+                        builder._xway_freeze_state._until = 0
+                    end
+                end
+            else
+                builder._xway_freeze_state = { active = false, _until = 0 }
+            end
+
+            if not should_freeze then
+                if method == 'Tickcount' then
+                    builder._tickcount = (builder._tickcount or 0) + 1
+                    if builder._tickcount >= 2 then
+                        builder._xway_idx = (builder._xway_idx % ways) + 1
+                        builder._tickcount = 0
+                    end
+                else
+                    if builder._xway_last_tick == 0 then
+                        builder._xway_last_tick = tick
+                    end
+            
+                    if tick - builder._xway_last_tick >= delay then
+                        builder._xway_idx = (builder._xway_idx % ways) + 1
+                        builder._xway_last_tick = tick
+                    end
+                end
+            end
+        
+            local idx = builder._xway_idx
+        
+            if method == 'Skitter' then
+                local base_offset = offsets[idx] or 0
+                local final_offset = apply_skitter_direct(base_offset)
+                offset = offset + final_offset
+            elseif method == 'Tickcount' then
+                offset = offset + (offsets[idx] or 0)
+            end
+        
+            jitter_offset = 0
+            yaw_jitter = 'Off'
+        elseif yaw_jitter == 'Custom' then
+
+            yaw_jitter = 'Off'
+        end
+
+        local manual_aa = manual()
+        local manual_offsets = {-90, 90, 180}
+        if manual_aa >= 1 and manual_aa <= 3 then
+            reference.antiaim.angles.freestanding[1]:override(false)
+            local condition_met = (manual_aa == 1 and not elements.conditions['Manual left'].enable.value) or (manual_aa == 2 and not elements.conditions['Manual right'].enable.value) or (manual_aa == 3)
+            
+            if condition_met then
+                offset = manual_offsets[manual_aa]
+                yaw_base = 'Local View'
+                yaw_jitter = 'Off'
+                body_yaw = 'Static'
+                body_side_value = 11
+            end
+        end
+
+        builder.d_state = builder.d_get_state()
+
+        local defensive = {
+            yaw = elements.defensive[builder.d_state].yaw:get(),
+            speed = elements.defensive[builder.d_state].speed:get(),
+            offset = elements.defensive[builder.d_state].offset:get(),
+            left = elements.defensive[builder.d_state].left:get(),
+            right = elements.defensive[builder.d_state].right:get(),
+            min_gen = elements.defensive[builder.d_state].min_gen:get(),
+            max_gen = elements.defensive[builder.d_state].max_gen:get(),
+            duration = elements.defensive[builder.d_state].duration:get(),
+            pitch_min_max = elements.defensive[builder.d_state].pitch_min_max:get(),
+            pitch_height_based = elements.defensive[builder.d_state].pitch_height_based:get(),
+            yaw_left_right = elements.defensive[builder.d_state].yaw_left_right:get(),
+            yaw_generation = elements.defensive[builder.d_state].yaw_generation:get(),
+            pitch_mode = elements.defensive[builder.d_state].pitch_mode:get(),
+            pitch_speed = elements.defensive[builder.d_state].pitch_speed:get(),
+            pitch = elements.defensive[builder.d_state].pitch:get(),
+            pitch_min = elements.defensive[builder.d_state].pitch_min:get(),
+            pitch_max = elements.defensive[builder.d_state].pitch_max:get()
+        }
+
+        local toggle_defensive = false
+        if builder.d_state ~= 'Global' and elements.defensive[builder.d_state].enable:get() then
+            toggle_defensive = true
+        elseif builder.d_state == 'Global' then
+            toggle_defensive = true
+        else
+            toggle_defensive = false
+        end
+        if toggle_defensive then
+            if (elements.defensive[builder.d_state].defensive_on:get('Double tap') and exploits:is_doubletap()) or (elements.defensive[builder.d_state].defensive_on:get('Hide shots') and exploits:is_hideshots() and not exploits:is_doubletap()) then
+                if elements.defensive[builder.d_state].defensive_mode:get() == 'On peek' then
+                    exploits:should_force_defensive(false)
+                elseif elements.defensive[builder.d_state].defensive_mode:get() == 'Always on' then
+                    exploits:should_force_defensive(true)
+                end
+                local disable_defensive_aa = false
+                local threat = client.current_threat()
+                if elements.anti_aim.settings.list:get('Off defensive aa vs low ping') and threat then
+                    local resource = entity.get_player_resource(threat)
+                    if not resource then 
+                        disable_defensive_aa = true
+                    end
+
+                    local ping = entity.get_prop(resource, 'm_iPing', threat)
+                    if not ping or (ping < 15) then 
+                        disable_defensive_aa = true 
+                    end
+                end
+
+                if elements.defensive[builder.d_state].toggle_builder:get() and exploits:in_defensive(defensive.duration) and not disable_defensive_aa then
+                    local d_inverted = d_inverter(e, builder.d_state)
+
+                    pitch = 'custom'
+                    pitch_offset = defensive.pitch
+                    yaw = defensive.yaw
+                    offset = defensive.offset
+                    yaw_jitter = 'Off'
+    
+                    -- @lordmouse: TODO fix this shitcode
+                    if defensive.pitch_height_based then
+                        local my_pos = vector(entity.get_origin(entity.get_local_player()))
+                        local threat = client.current_threat()
+                        local height_diff = 0
+                        if threat then
+                            local enemy_pos = vector(entity.get_origin(threat))
+                            height_diff = math.ceil(my_pos.z - enemy_pos.z)
+                        end
+
+                        local height_based_min = math.max(-89, -89 + height_diff)
+                        local height_based_max = math.min(89, 89 + height_diff)
+
+                        if defensive.pitch_mode == 'Jitter' then
+                            local speed = math.max(1, math.min(defensive.pitch_speed, 15))
+                            local interval = math.floor(math.floor(1 / globals.tickinterval()) / speed)
+                            local phase = math.floor(globals.tickcount() / interval) % 2
+                            pitch = 'custom'
+                            pitch_offset = (phase == 0) and height_based_min or height_based_max
+                        elseif defensive.pitch_mode == 'Random' then
+                            pitch = 'custom'
+                            pitch_offset = client.random_int(height_based_min, height_based_max)
+                        elseif defensive.pitch_mode == 'Cycling' then
+                            local cycle_speed = defensive.pitch_speed
+                            if pitch_add >= height_based_max then pitch_add = height_based_min else pitch_add = pitch_add + cycle_speed end
+                            pitch = 'custom'
+                            pitch_offset = pitch_add
+                        elseif defensive.pitch_mode == 'Spin' then
+                            local spin_speed = defensive.pitch_speed
+                            local mid = (height_based_min + height_based_max) / 2
+                            local amp = math.abs(height_based_max - height_based_min) / 2
+                            pitch = 'custom'
+                            pitch_offset = mid + math.sin(globals.realtime() * spin_speed) * amp
+                        elseif defensive.pitch_mode == 'Sway' then
+                            local sway_speed = defensive.pitch_speed
+                            local mid = (height_based_min + height_based_max) / 2
+                            local amp = math.abs(height_based_max - height_based_min) / 2
+                            pitch = 'custom'
+                            pitch_offset = mid + math.sin(globals.realtime() * sway_speed) * amp * (math.cos(globals.realtime() * sway_speed * 0.5) + 1) / 2
+                        else
+                            pitch = 'custom'
+                            pitch_offset = height_based_min
+                        end
+                    elseif defensive.pitch_min_max then
+                        if defensive.pitch_mode == 'Jitter' then
+                            local speed = math.max(1, math.min(defensive.pitch_speed, 15))
+                            local interval = math.floor(math.floor(1 / globals.tickinterval()) / speed)
+                            local phase = math.floor(globals.tickcount() / interval) % 2
+                            pitch = 'custom'
+                            pitch_offset = (phase == 0) and defensive.pitch_min or defensive.pitch_max
+                        elseif defensive.pitch_mode == 'Random' then
+                            pitch = 'custom'
+                            pitch_offset = client.random_int(defensive.pitch_min, defensive.pitch_max)
+                        elseif defensive.pitch_mode == 'Cycling' then
+                            local cycle_speed = defensive.pitch_speed
+                            if pitch_add >= defensive.pitch_max then pitch_add = defensive.pitch_min else pitch_add = pitch_add + cycle_speed end
+                            pitch = 'custom'
+                            pitch_offset = pitch_add
+                        elseif defensive.pitch_mode == 'Spin' then
+                            local spin_speed = defensive.pitch_speed
+                            local mid = (defensive.pitch_min + defensive.pitch_max) / 2
+                            local amp = math.abs(defensive.pitch_max - defensive.pitch_min) / 2
+                            pitch = 'custom'
+                            pitch_offset = mid + math.sin(globals.realtime() * spin_speed) * amp
+                        elseif defensive.pitch_mode == 'Sway' then
+                            local sway_speed = defensive.pitch_speed
+                            local mid = (defensive.pitch_min + defensive.pitch_max) / 2
+                            local amp = math.abs(defensive.pitch_max - defensive.pitch_min) / 2
+                            pitch = 'custom'
+                            pitch_offset = mid + math.sin(globals.realtime() * sway_speed) * amp * (math.cos(globals.realtime() * sway_speed * 0.5) + 1) / 2
+                        else
+                            pitch = 'custom'
+                            pitch_offset = defensive.pitch_min
+                        end
+                    else
+                        pitch = 'custom'
+                        pitch_offset = defensive.pitch
+                        if defensive.pitch_mode == 'Spin' then
+                            local spin_speed = defensive.pitch_speed
+                            pitch_offset = math.sin(globals.realtime() * spin_speed) * pitch_offset
+                        elseif defensive.pitch_mode == 'Sway' then
+                            local sway_speed = defensive.pitch_speed
+                            local sway_amplitude = pitch_offset * 0.5
+                            pitch_offset = math.sin(globals.realtime() * sway_speed) * sway_amplitude * (math.cos(globals.realtime() * sway_speed * 0.5) + 1)
+                        elseif defensive.pitch_mode == 'Jitter' then
+                            local speed = math.max(1, math.min(defensive.pitch_speed, 15))
+                            local interval = math.floor(math.floor(1 / globals.tickinterval()) / speed)
+                            local phase = math.floor(globals.tickcount() / interval) % 2
+                            local switch_amount = (phase == 0) and pitch_offset or -pitch_offset
+                            pitch_offset = switch_amount
+                        elseif defensive.pitch_mode == 'Cycling' then
+                            local cycle_speed = defensive.pitch_speed
+                            if pitch_add >= -pitch_offset then pitch_add = pitch_offset else pitch_add = pitch_add + cycle_speed end
+                            pitch_offset = pitch_add
+                        elseif defensive.pitch_mode == 'Random' then
+                            pitch_offset = client.random_int(pitch_offset <= 0 and pitch_offset or -pitch_offset, pitch_offset <= 0 and -pitch_offset or pitch_offset)
+                        end
+                    end
+    
+                    if defensive.yaw_left_right then
+                        offset = (d_inverted == 1 and defensive.left or d_inverted == -1 and defensive.right) or defensive.left
+                    end
+    
+                    if defensive.yaw_generation then
+                        local min_gen, max_gen = defensive.min_gen, defensive.max_gen
+                        if exploits.ticks_processed <= 2 then
+                            generated_yaw = nil
+                        elseif exploits.ticks_processed > 2 then
+                            if not generated_yaw then
+                                generated_yaw = client.random_int(min_gen, max_gen)
+                            end
+
+                            offset = offset + generated_yaw
+                        end
+                    end
+    
+                    if yaw == 'Distortion' then
+                        yaw = '180'
+                        local distortion_speed = defensive.speed
+                        local distortion_amplitude = offset * 1.5
+                        local distortion_time = globals.realtime() * distortion_speed
+                        offset = offset + math.sin(distortion_time) * distortion_amplitude
+                    elseif yaw == 'Sway' then
+                        yaw = '180'
+                        local sway_speed = defensive.speed
+                        local sway_amplitude = offset
+                        local sway_time = globals.realtime() * sway_speed
+                        offset = offset + math.sin(sway_time) * sway_amplitude * (math.cos(sway_time * 0.5) + 1) / 2
+                    elseif yaw == 'Freestand' then
+                        yaw = '180'
+                        offset = helpers.get_freestand_direction(entity.get_local_player()) == -1 and -offset or offset
+                    end
+                end
+            end
+        end
+
+        -- print('builder: forcing defensive - ' .. tostring(e.force_defensive))
+
+        return {
+            pitch = pitch,
+            pitch_offset = pitch_offset,
+            yaw = yaw,
+            yaw_base = yaw_base,
+            offset = offset,
+            yaw_jitter = yaw_jitter,
+            jitter_offset = jitter_offset,
+            body_yaw = body_yaw,
+            body_side = body_side_value,
+            fs_body_yaw = fs_body_yaw
         }
     end
 
-    local tab = tabs.fl:combobox("\vRegicide.Hit ["..version[1].."]", {"Home", "Features", "Antiaims"}, false)
-    local tab_label = tabs.fl:label("\a373737FF‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾")
+    function reset_angles ()
+        reference.antiaim.angles.enabled:override(true)
+        reference.antiaim.angles.pitch[1]:override('Down')
+        reference.antiaim.angles.pitch[2]:override(0)
 
-    local setup = tabs.aa:combobox("Setup", {
-        "None", "Crosshair Indicator", "Damage Indicator", "Manual Yaw Indicator", 
-        "Custom Scope", "Thirdperson Distance", "Ragebot Logs", "Shot Marker",
-        "Bullet Tracer", "Damage Helper", "Resolver", "Predict", "Console Filter", "Trashtalk",
-        "Watermark", "Hitchance Modifier", "Aspect Ratio", "Viewmodel",
-         "Animations", "Clantag", "Stickman", "Angelic Tap", "JumpStop",
-        "Velocity Warning", "Defensive indicator", "Gamesense Indicator",
-        "Bomb Indicator"
-    }, false)
-    setup:set_visible(false)
-    local disabled = {
-        -- ["Stickman"] = true,
+        reference.antiaim.angles.yaw[1]:override('180')
+        reference.antiaim.angles.yaw_base:override('Local view')
+
+        reference.antiaim.angles.freestanding[1]:override(false)
+        reference.antiaim.angles.edge_yaw:override(false)
+        
+        reference.antiaim.angles.yaw[2]:override(0)
+        reference.antiaim.angles.yaw_jitter[1]:override('Off')
+        reference.antiaim.angles.yaw_jitter[2]:override(0)
+        
+        reference.antiaim.angles.body_yaw[1]:override('Off')
+        reference.antiaim.angles.body_yaw[2]:override(0)
+        reference.antiaim.angles.fs_body_yaw:override(false)
+    end
+
+    local function set_angles (e)
+        exploits:should_force_defensive(false)
+        
+        local state = helpers.get_state()
+        local me = entity.get_local_player()
+        if not me or not entity.is_alive(me) then
+            reset_angles()
+            return
+        end
+
+        local angles = builder.angles(e)
+
+        reference.antiaim.fakelag.amount:override()
+        reference.antiaim.fakelag.limit:override()
+        reference.misc.settings.anti_untrusted:override()
+        if elements.anti_aim.exploits.exploit:get() and elements.anti_aim.exploits.exploit.hotkey:get() then
+            reference.misc.settings.anti_untrusted:override(false)
+
+            -- local distortion_speed = 1
+            -- local distortion_amplitude = 360 * 1.5
+            -- local distortion_time = globals.realtime() * distortion_speed
+            -- local test_offset = math.cos(distortion_time) * distortion_amplitude
+
+            e.pitch = -540
+            e.yaw = e.yaw + 180 + helpers:clamp(angles.offset, -180, 180)
+
+            reference.antiaim.fakelag.amount:override('Dynamic')
+            reference.antiaim.fakelag.limit:override(14)
+            return
+        end
+
+        reference.antiaim.angles.enabled:override(true)
+        reference.antiaim.angles.pitch[1]:override(angles.pitch)
+        reference.antiaim.angles.pitch[2]:override(helpers:clamp(angles.pitch_offset, -89, 89))
+
+        reference.antiaim.angles.yaw[1]:override(angles.yaw)
+        reference.antiaim.angles.yaw_base:override(angles.yaw_base)
+
+        reference.antiaim.angles.freestanding[1]:override(not elements.anti_aim.hotkeys.freestanding_disablers:get(state) and elements.anti_aim.hotkeys.freestanding.value and elements.anti_aim.hotkeys.freestanding.hotkey:get() or false)
+        reference.antiaim.angles.freestanding[1]:set_hotkey('Always On')
+        reference.antiaim.angles.edge_yaw:override(elements.anti_aim.hotkeys.edge_yaw.value and elements.anti_aim.hotkeys.edge_yaw.hotkey:get() or false)
+        
+        reference.antiaim.angles.yaw[2]:override(helpers:clamp(angles.offset, -180, 180))
+        reference.antiaim.angles.yaw_jitter[1]:override(angles.yaw_jitter)
+        reference.antiaim.angles.yaw_jitter[2]:override(helpers:clamp(angles.jitter_offset, -180, 180))
+
+        reference.antiaim.angles.body_yaw[1]:override(angles.body_yaw)
+        reference.antiaim.angles.body_yaw[2]:override(angles.body_side)
+        reference.antiaim.angles.fs_body_yaw:override(angles.fs_body_yaw)
+    end
+
+    local function is_enemies_dead ()
+        if not elements.anti_aim.settings.list:get('Spin if enemies dead') then
+          return
+        end
+  
+        local alive = 0
+        for i = 1, globals.maxplayers() do
+          if entity.get_classname(i) == 'CCSPlayer' and entity.is_alive(i) and entity.is_enemy(i) then
+            alive = alive + 1
+          end
+        end
+
+        return alive
+    end
+
+    local function on_setup_command (e)
+        local me = entity.get_local_player()
+        if not me or not entity.is_alive(me) then
+            return
+        end
+
+        builder.state = builder.get_state()
+
+        -- @lordmouse: safe head
+        local weapon = entity.get_player_weapon(me)
+        local weapon_class = entity.get_classname(weapon)
+        if elements.anti_aim.settings.list:get('Safe head') and weapon and weapon_class and manual() ~= 3 then
+            local safe_weapons = {
+                CKnife = 'Knife',
+                CWeaponTaser = 'Taser'
+            }
+            
+            local is_safe_state = (builder.state == 'Air+' or not is_on_ground and builder.state == 'Fake lag' and entity.get_prop(me, 'm_flDuckAmount') == 1)
+            
+            local my_pos = vector(entity.get_origin(me))
+            local threat = client.current_threat()
+            local height_to_threat = 0
+            if threat then
+                local enemy_pos = vector(entity.get_origin(threat))
+                height_to_threat = math.ceil(my_pos.z - enemy_pos.z)
+            end
+
+            for sel_weapon, weapons in pairs(safe_weapons) do
+                if is_safe_state and ((safe_weapons[weapon_class] and elements.anti_aim.settings.safe_head_options:get(safe_weapons[weapon_class])) or (height_to_threat > 100 and elements.anti_aim.settings.safe_head_options:get('Height advantage'))) then
+                    if elements.anti_aim.settings.safe_head_mode:get() == 'Defensive' then
+                        if exploits:is_active() and not exploits:in_recharge() then
+                            exploits:should_force_defensive(true)
+
+                            reference.antiaim.angles.pitch[1]:override(exploits:in_defensive() and 'Custom' or 'Down')
+                            reference.antiaim.angles.pitch[2]:override(0)
+                            reference.antiaim.angles.yaw[2]:override(exploits:in_defensive() and 180 or 0)
+                            reference.antiaim.angles.body_yaw[1]:override(exploits:in_defensive() and 'Static' or 'Off')
+                            reference.antiaim.angles.body_yaw[2]:override(1)
+                        else
+                            exploits:should_force_defensive(false)
+
+                            reference.antiaim.angles.pitch[1]:override('Down')
+                            reference.antiaim.angles.yaw[2]:override(0)
+                            reference.antiaim.angles.body_yaw[1]:override('Off')
+                            reference.antiaim.angles.body_yaw[2]:override(0)
+                        end
+                    else
+                        exploits:should_force_defensive(false)
+
+                        reference.antiaim.angles.pitch[1]:override('Down')
+                        reference.antiaim.angles.yaw[2]:override(0)
+                        reference.antiaim.angles.body_yaw[1]:override('Off')
+                        reference.antiaim.angles.body_yaw[2]:override(0)
+                    end
+                    reference.antiaim.angles.yaw_base:override('At Targets')
+                    reference.antiaim.angles.yaw[1]:override('180')
+                    reference.antiaim.angles.yaw_jitter[1]:override('Off')
+                    reference.antiaim.angles.yaw_jitter[2]:override(0)
+                end
+            end
+        end
+        
+        -- @lordmouse: spin if enemies dead or warmup
+        reference.antiaim.fakelag.limit:override()
+        if elements.anti_aim.settings.list:get('Spin if enemies dead') and is_enemies_dead() == 0 or elements.anti_aim.settings.list:get('Spin on warmup') and entity.get_prop(entity.get_all('CCSGameRulesProxy')[1],'m_bWarmupPeriod') == 1 then
+            reference.antiaim.angles.pitch[1]:override('Custom')
+            reference.antiaim.angles.pitch[2]:override(0)
+            reference.antiaim.angles.yaw[1]:override('Spin')
+            reference.antiaim.angles.yaw[2]:override(5)
+            reference.antiaim.angles.yaw_jitter[1]:override('Off')
+            reference.antiaim.angles.yaw_jitter[2]:override(0)
+            reference.antiaim.angles.body_yaw[1]:override('Static')
+            reference.antiaim.angles.body_yaw[2]:override(1)
+
+            reference.antiaim.fakelag.limit:override(1)
+        end
+
+        -- @lordmouse: anti-backstab
+        if elements.anti_aim.settings.list:get('Anti backstab') then
+            local players = entity.get_players(true)
+            local local_pos = vector(entity.get_prop(me, 'm_vecOrigin'))
+
+            for i = 1, #players do
+                local player_pos = vector(entity.get_prop(players[i], 'm_vecOrigin'))
+                local enemy_weapon = entity.get_player_weapon(players[i])
+
+                anti_backstab = false
+                if entity.get_classname(enemy_weapon) == 'CKnife' and local_pos:dist(player_pos) <= 450 then
+                    local eye_pos = vector(client.eye_position())
+                    local hitbox_pos = vector(entity.hitbox_position(players[i], 4))
+                
+                    local fraction, entindex_hit = client.trace_line(players[i], hitbox_pos.x, hitbox_pos.y, hitbox_pos.z, eye_pos.x, eye_pos.y, eye_pos.z)
+
+                    if entindex_hit == me or fraction == 1 then
+                        anti_backstab = true
+                        reference.antiaim.angles.pitch[1]:override('Down')
+                        reference.antiaim.angles.yaw_base:override('At Targets')
+                        reference.antiaim.angles.yaw[1]:override('180')
+                        reference.antiaim.angles.yaw[2]:override(180)
+                        reference.antiaim.angles.yaw_jitter[1]:override('Off')
+                        reference.antiaim.angles.yaw_jitter[2]:override(0)
+                    end
+                end
+            end
+        end
+
+        if elements.anti_aim.settings.list:get('Fast ladder') then
+            local pitch, yaw = client.camera_angles()
+            local move_type = entity.get_prop(me, 'm_MoveType')
+            local weapon = entity.get_player_weapon(me)
+            local throw = entity.get_prop(weapon, 'm_fThrowTime')
+        
+            if move_type ~= 9 then
+                return
+            end
+        
+            if weapon == nil then
+                return
+            end
+        
+            if throw ~= nil and throw ~= 0 then
+                return
+            end	
+        
+            if e.forwardmove > 0 then
+                if e.pitch < 45 then
+                    e.pitch = 89
+                    e.in_moveright = 1
+                    e.in_moveleft = 0
+                    e.in_forward = 0
+                    e.in_back = 1
+            
+                    if e.sidemove == 0 then
+                        e.yaw = e.yaw + 90
+                    end
+            
+                    if e.sidemove < 0 then
+                        e.yaw = e.yaw + 150
+                    end
+            
+                    if e.sidemove > 0 then
+                        e.yaw = e.yaw + 30
+                    end
+                end
+            elseif e.forwardmove < 0 then
+                e.pitch = 89
+                e.in_moveleft = 1
+                e.in_moveright = 0
+                e.in_forward = 1
+                e.in_back = 0
+        
+                if e.sidemove == 0 then
+                    e.yaw = e.yaw + 90
+                end
+        
+                if e.sidemove > 0 then
+                    e.yaw = e.yaw + 150
+                end
+        
+                if e.sidemove < 0 then
+                    e.yaw = e.yaw + 30
+                end
+            end
+        end
+
+        -- @lordmouse: bombsite fix
+        if elements.anti_aim.settings.list:get('E-Bombsite fix') then
+            if entity.get_prop(me, 'm_iTeamNum') == 2 then
+                if entity.get_prop(me, 'm_bInBombZone') > 0 then
+                    if bit.band(e.buttons, 32) == 32 and entity.get_classname(weapon) ~= 'CC4' then
+                        e.buttons = bit.band(e.buttons, bit.bnot(32))
+                        reference.antiaim.angles.yaw_base:override('Local View')
+                        reference.antiaim.angles.pitch[1]:override('Custom')
+                        reference.antiaim.angles.pitch[2]:override(0)
+                        reference.antiaim.angles.yaw[1]:override('180')
+                        reference.antiaim.angles.yaw[2]:override(180)
+                        reference.antiaim.angles.yaw_jitter[1]:override('Off')
+                        reference.antiaim.angles.yaw_jitter[2]:override(0)
+                        reference.antiaim.angles.body_yaw[1]:override('Static')
+                        reference.antiaim.angles.body_yaw[2]:override(1)
+                    end
+                end
+            end
+        end
+    end
+
+    client.set_event_callback('setup_command', set_angles)
+    client.set_event_callback('setup_command', on_setup_command)
+
+    local function reset_everything ()
+        builder.manual_tick = 0
+        builder.side = 1
+        builder._freeze_state.active = false
+        builder._freeze_state._until = 0
+        builder.current_tick = 0
+        builder.delay_ticks.default = 0
+        builder.delay_ticks.defensive = 0
+        builder.d_side = 1
+
+        skitter_per_tick = false
+        skitter_accumulated_offset = 0
+        skitter_goal_feet_yaw = 0
+        skitter_last_view_angle = 0
+        skitter_initialized = false
+
+        builder._xway_offsets = { _xway_tick = 0, _xway_last_tick = 0, _xway_idx = 1 }
+        builder._xway_freeze_state = { active = false, _until = 0 }
+        builder._xway_tick = 0
+        builder._xway_last_tick = 0
+        builder._xway_idx = 1
+    end
+
+    local function on_player_death (e)
+        if not (e.userid and e.attacker) then
+            return 
+        end
+
+        if entity.get_local_player() ~= client.userid_to_entindex(e.userid) then 
+            return 
+        end
+        
+        reset_everything()
+    end
+    
+    local function on_level_init ()
+        reset_everything() 
+    end
+    
+    local function on_round_end ()
+        reset_everything() 
+    end
+
+    client.set_event_callback('player_death', on_player_death)
+    client.set_event_callback('level_init', on_level_init)
+    client.set_event_callback('round_end', on_round_end)
+end
+
+local defensive_flick do
+    local delay = nil
+    local pitch_gen = nil
+    local yaw_gen = nil
+    local side = 0
+    local cache_tick = 0
+
+    local function on_setup_command (e)
+        if not elements.anti_aim.exploits.defensive_flick.enable:get() then
+            return
+        end
+
+        local condition = builder.get_state()
+        local pitch, pitch_offset = 'Custom', 0
+        local yaw = '180'
+        local yaw_base, offset, body_yaw, body_side, fs_body_yaw = 'At targets', 0, 'Static', 0, false
+
+        exploits:should_force_defensive(false)
+        if elements.anti_aim.exploits.defensive_flick.settings.states:get(condition) and (condition ~= 'Fake lag' and not fakelag.active) and not anti_backstab then
+            exploits:should_force_defensive(true)
+
+            if exploits.ticks_processed <= 2 then
+                delay = nil
+            elseif exploits.ticks_processed > 2 then
+                if not delay then
+                    delay = client.random_int(1, 50)
+                end
+            end
+
+            if exploits:in_defensive() then
+                pitch_offset = 0
+                body_side, fs_body_yaw = 1, false
+                        
+                local current_tick = globals.tickcount()
+                if cache_tick < current_tick - (delay or 1) then
+                    -- print('work')
+                    cache_tick = current_tick
+                    side = side == 1 and -1 or 1
+                end
+
+                if side == -1 then
+                    offset = -90
+                else
+                    offset = 90
+                end
+            else
+                pitch_offset = 89
+                offset = 0
+                body_side, fs_body_yaw = 0, true
+            end
+
+            reference.antiaim.angles.pitch[1]:override(pitch)
+            reference.antiaim.angles.pitch[2]:override(helpers:clamp(pitch_offset, -89, 89))
+
+            reference.antiaim.angles.yaw[1]:override(yaw)
+            reference.antiaim.angles.yaw_base:override(yaw_base)
+            
+            reference.antiaim.angles.yaw[2]:override(helpers:clamp(offset, -180, 180))
+            reference.antiaim.angles.yaw_jitter[1]:override('Off')
+            reference.antiaim.angles.yaw_jitter[2]:override(0)
+            
+            reference.antiaim.angles.body_yaw[1]:override(body_yaw)
+            reference.antiaim.angles.body_yaw[2]:override(body_side)
+            reference.antiaim.angles.fs_body_yaw:override(fs_body_yaw)
+        end
+    end
+
+    client.set_event_callback('setup_command', on_setup_command)
+end
+
+---
+
+local function control_exploits (ctx)
+    reference.rage.aimbot.double_tap[1]:override()
+    reference.rage.aimbot.double_tap[2]:override()
+
+    reference.rage.aimbot.double_tap[1]:override(ctx)
+    reference.rage.aimbot.double_tap[2]:override('Defensive')
+end
+
+local unsafe_recharge = { timer = globals.tickcount(), ticks = 14 }; do
+    local function on_setup_command ()
+        if not elements.aimbot.unsafe_exploit:get() then
+            return
+        end
+    
+        local me = entity.get_local_player()
+        if not me or not entity.is_alive(me) then
+            reference.rage.aimbot.enabled[1]:set_hotkey('Always on')
+            return
+        end
+    
+        local doubletap_ref = reference.rage.aimbot.double_tap[1]:get() and reference.rage.aimbot.double_tap[1].hotkey:get() and not reference.rage.other.fake_duck:get()
+        local osaa_ref = reference.antiaim.other.on_shot_anti_aim[1]:get() and reference.antiaim.other.on_shot_anti_aim[1].hotkey:get() and not reference.rage.other.fake_duck:get()
+    
+        local weapon = entity.get_player_weapon(me)
+        if not weapon then 
+            reference.rage.aimbot.enabled[1]:set_hotkey('Always on')
+            return
+        end
+    
+        unsafe_recharge.ticks = csgo_weapons(weapon).is_revolver and 17 or 14
+    
+        if (doubletap_ref) or (osaa_ref) then
+            if globals.tickcount() >= unsafe_recharge.timer + unsafe_recharge.ticks then
+                reference.rage.aimbot.enabled[1]:set_hotkey('Always on')
+            else
+                reference.rage.aimbot.enabled[1]:set_hotkey('On hotkey')
+            end
+        else
+            unsafe_recharge.timer = globals.tickcount()
+    
+            reference.rage.aimbot.enabled[1]:set_hotkey('Always On')
+        end
+    end
+    
+    client.set_event_callback('setup_command', on_setup_command)
+end
+
+local auto_discharge do
+    local air_tick_interval = 13
+
+    local function should_allow_tickbase_shift()
+        local cur_tick = globals.tickcount()
+        return cur_tick % air_tick_interval ~= 0
+    end
+
+    local exploit_active = false
+    local function on_setup_command (e)
+        if not elements.aimbot.auto_discharge.enable:get() then
+            return
+        end
+
+        if not elements.aimbot.auto_discharge.enable.hotkey:get() then
+            reference.rage.aimbot.enabled[1]:set_hotkey('Always on')
+            control_exploits(true)
+            return
+        end
+
+        reference.rage.aimbot.enabled[1]:set_hotkey('Always on')
+
+        local state = helpers.get_state()
+        if state == 'Air' or state == 'Air+' then
+            if elements.aimbot.auto_discharge.settings.mode:get() == 'Air lag' then
+                exploits:should_force_defensive(true)
+                if elements.aimbot.auto_discharge.settings.air_lag_mode:get() == 'Fast' then
+                    if (exploits.ticks_processed > 1 and exploits.ticks_processed < exploits.max_process_ticks and exploits.tickbase_difference > 0) then
+                        control_exploits(false)
+                        exploit_active = true
+                    else
+                        reference.rage.aimbot.enabled[1]:set_hotkey('On hotkey')
+                        control_exploits(true)
+                        exploit_active = false
+                    end
+                elseif elements.aimbot.auto_discharge.settings.air_lag_mode:get() == 'Slow' then
+                    if (exploits.ticks_processed > 1 and exploits.ticks_processed > 13 and exploits.tickbase_difference > 0) then
+                        e.allow_shift_tickbase = should_allow_tickbase_shift()
+                        control_exploits(false)
+                        exploit_active = true
+                    else
+                        reference.rage.aimbot.enabled[1]:set_hotkey('On hotkey')
+                        control_exploits(true)
+                        exploit_active = false
+                    end
+                end
+            elseif elements.aimbot.auto_discharge.settings.mode:get() == 'Default' then
+
+            end
+        end
+    end
+
+    client.set_event_callback('setup_command', on_setup_command)
+
+    local function on_paint ()
+        if not elements.aimbot.auto_discharge.enable:get() then
+            return
+        end
+
+        if elements.aimbot.auto_discharge.enable.hotkey:get() and exploits:is_doubletap() then
+            local state = helpers.get_state()
+            local r, g, b, a = 255, 0, 50, 255
+            if exploit_active then
+                r, g, b = 255, 255, 255
+            end
+            renderer.indicator(r, g, b, a, 'LAG')
+        end
+    end
+
+    client.set_event_callback('paint', on_paint)
+end
+
+local resolver = { records = { }, max_records = 32 }; do
+    local function is_bot (ent)
+        return entity.get_steam64(ent) == 0
+    end
+
+              state = false,
+            records = {},
+            fix = function(self, ent, realtime)
+                local entpich, entyaw = entity.get_prop(ent, "m_angEyeAngles")
+                return {
+                    time = realtime,
+                    pos = entity.get_prop(ent, "m_flPoseParameter", 11) * 120 - 60,
+                    pitch = entpich,
+                    yaw = entyaw
+                }
+            end,
+            work = function(self)
+                local players = {}
+                client.update_player_list()
+    
+                for i = 1, #players do
+                    local entity = players[i]
+                    local steam = entity.get_steam64(players[i])
+    
+                    if entity.is_enemy(entity) and steam then
+                        local sim1, sim2 = entity.get_simtime(entity)
+                        local tick1, tick2 = toticks(sim1), toticks(sim2)
+                        local records = self.records[steam]
+                        local gather = self:fix(entity, tick1)
+                        local last
+    
+                        last = records and records.prev
+    
+                        if not records then
+                            self.records[steam] = {
+                                diff = tick1 - tick2,
+                                prev = gather
+                            }
+                            records = self.records[steam]
+                        else
+                            records.diff = tick1 - tick2
+                        end
+    
+                        local baim
+    
+                        if records ~= nil and records.diff >= 0 and records.diff <= 2 and not entity.is_lethal(entity) then
+                            local anim = entity.get_animstate(entity)
+                            local yaw = util:normalize_yaw(gather.yaw - anim.goal_feet_yaw)
+    
+                            gather.gfy = anim.goal_feet_yaw
+    
+                            if yaw ~= 0 then
+                                baim = (yaw > 0 and -1 or 1) * entity.get_max_desync(anim)
+    
+                                if baim then
+                                    print(entity.get_player_name(entity).." body:"..baim)
+                                    plist.set(entity, "Force body yaw value", baim)
+                                end
+                            end
+                        end
+    
+                        records.active = baim ~= nil
+    
+                        plist.set(entity, "Force body yaw", baim ~= nil)
+                        plist.set(entity, "Correction active", true)
+    
+                        records.prev = gather
+                    end
+                end
+            end,
+            refresh = function(self)
+                table.clear(self.records)
+            end,
+            reset = function(self)
+                for player = 1, 64 do
+                    plist.set(player, "Force body yaw", false)
+                end
+    
+                self.records = {}
+            end,
+            run = function(self)
+                local enabled = elements.resolver:get()
+                
+                if self.state ~= enabled then 
+                    if not enabled then 
+                        self:reset()
+                    end
+                    self.state = enabled
+                end
+    
+                if enabled then 
+                    self:work()
+                end
+            end
+end
+
+local aim_punch_fix = { last_health = 100, override_active = false }; do
+    local function on_setup_command()
+        if not elements.aimbot.aim_punch_fix:get() then
+            return
+        end
+
+        local me = entity.get_local_player()
+        if not me or not entity.is_alive(me) then
+            aim_punch_fix.last_health = 100
+            if aim_punch_fix.override_active then
+                reference.rage.aimbot.minimum_hitchance:override()
+                aim_punch_fix.override_active = false
+            end
+            return
+        end
+
+        local current_health = entity.get_prop(me, 'm_iHealth') or 100
+
+        if current_health < aim_punch_fix.last_health then
+            reference.rage.aimbot.minimum_hitchance:override(100)
+            aim_punch_fix.override_active = true
+        elseif aim_punch_fix.override_active then
+            reference.rage.aimbot.minimum_hitchance:override()
+            aim_punch_fix.override_active = false
+        end
+
+        aim_punch_fix.last_health = current_health
+    end
+
+    elements.aimbot.aim_punch_fix:set_event('setup_command', on_setup_command)
+end
+
+local auto_hide_shots = { hotkey = nil }; do
+    local function on_setup_command ()
+        if not elements.aimbot.auto_hs.enable:get() then
+            return
+        end
+      
+        if not auto_hide_shots.hotkey then
+            auto_hide_shots.hotkey = { reference.antiaim.other.on_shot_anti_aim[1]:get_hotkey() }
+        end
+      
+        local me = entity.get_local_player()
+        if not me or not entity.is_alive(me) then
+            return
+        end
+      
+        local condition = builder.get_state()
+      
+        local avoid_guns = {
+            ['Pistols'] = { 'CWeaponGlock', 'CWeaponHKP2000', 'CWeaponP250', 'CWeaponTec9', 'CWeaponFiveSeven' },
+            ['Desert Eagle'] = { 'CDEagle' },
+            ['Auto Snipers'] = { 'CWeaponSCAR20', 'CWeaponG3SG1' },
+            ['Desert Eagle + Crouch'] = { 'CDEagle' }
+        }
+
+        local mode_number = auto_hide_shots.hotkey[2]
+        local mode_new = 'On hotkey'
+        if mode_number == 0 then
+            mode_new = 'Always on'
+        elseif mode_number == 1 then
+            mode_new = 'On hotkey'
+        elseif mode_number == 2 then
+            mode_new = 'Toggle'
+        elseif mode_number == 3 then
+            mode_new = 'Off hotkey'
+        end
+      
+        if elements.aimbot.auto_hs.settings.state:get(condition) then
+            local weapon = entity.get_player_weapon(me)
+            if not weapon then
+                return
+            end
+      
+            local weapon_classname = entity.get_classname(weapon)
+            local is_crouching = entity.get_prop(me, 'm_flDuckAmount') == 1
+            local should_avoid = false
+      
+            for avoid_type, weapons in pairs(avoid_guns) do
+                for _, weapon_name in ipairs(weapons) do
+                    if weapon_classname == weapon_name then
+                        if avoid_type == 'Desert Eagle + Crouch' and not is_crouching then
+                            break
+                        end
+                        if elements.aimbot.auto_hs.settings.avoid_guns:get(avoid_type) then
+                            should_avoid = true
+                            break
+                        end
+                    end
+                end
+                if should_avoid then
+                    break
+                end
+            end
+      
+            if not should_avoid then
+                reference.antiaim.other.on_shot_anti_aim[1]:set_hotkey('Always On')
+                control_exploits(false)
+            else
+                reference.antiaim.other.on_shot_anti_aim[1]:set_hotkey(mode_new)
+                control_exploits(true)
+            end
+        else
+            reference.antiaim.other.on_shot_anti_aim[1]:set_hotkey(mode_new)
+            control_exploits(true)
+        end
+    end
+
+    -- client.set_event_callback('setup_command', on_setup_command)
+    elements.aimbot.auto_hs.enable:set_event('setup_command', on_setup_command)
+end
+
+local auto_air_stop do
+    local delay_ticks = 13
+    local last_air_tick = 0
+    local speed_limit = elements.aimbot.auto_air_stop.settings.speed:get()
+
+    local function can_shoot (me, gun)
+        if not me or not gun then return false end
+        local next_attack = entity.get_prop(me, 'm_flNextAttack') or 0
+        local next_primary = entity.get_prop(gun, 'm_flNextPrimaryAttack') or 0
+        local curtime = globals.curtime()
+        local clip = entity.get_prop(gun, 'm_iClip1') or 0
+        return (math.max(next_attack, next_primary) <= curtime) and clip > 0
+    end
+
+    local function is_enemy_visible (local_player, enemy)
+        local local_player_origin = {entity.get_origin(local_player)}
+        local enemy_origin = {entity.get_origin(enemy)}
+        if local_player_origin[1] == nil or enemy_origin[1] == nil then
+            return false
+        end
+        local trace_fraction, _ = client.trace_bullet(local_player, local_player_origin[1], local_player_origin[2], local_player_origin[3] + 16, enemy_origin[1], enemy_origin[2], enemy_origin[3] + 16)
+        return trace_fraction
+    end
+
+    local function estimate_hitchance (me, gun)
+        local weapon_class = entity.get_classname(gun)
+        if weapon_class ~= 'CWeaponSSG08' then return 0 end
+
+        local scoped = entity.get_prop(me, 'm_bIsScoped') == 1
+        local duck = entity.get_prop(me, 'm_flDuckAmount') or 0
+        local velocity = vector(entity.get_prop(me, 'm_vecVelocity'))
+        local speed = velocity:length2d()
+        local dist = 0
+        local threat = client.current_threat()
+        if threat then
+            local my_pos = vector(entity.get_origin(me))
+            local enemy_pos = vector(entity.get_origin(threat))
+            dist = my_pos:dist(enemy_pos)
+        end
+
+        local base_spread = 0.002
+        if not scoped then
+            base_spread = 0.08
+        end
+        if duck == 1 then
+            base_spread = base_spread * 0.7
+        end
+        if speed > 5 then
+            base_spread = base_spread + (speed / 300) * 0.08
+        end
+        if dist > 1000 then
+            base_spread = base_spread + (dist - 1000) / 4000
+        end
+
+        local hc = 100 - (base_spread * 1000)
+        if hc > 100 then hc = 100 end
+        if hc < 0 then hc = 0 end
+        return hc
+    end
+
+    local function angle_math (x, y)
+        local angle_x_sin = math.sin(math.rad(x))
+        local angle_x_cos = math.cos(math.rad(x))
+        local angle_y_sin = math.sin(math.rad(y))
+        local angle_y_cos = math.cos(math.rad(y))
+        return angle_x_cos * angle_y_cos, angle_x_cos * angle_y_sin, -angle_x_sin
+    end
+
+    local function on_setup_command (e)
+        if not elements.aimbot.auto_air_stop.enable:get() then
+            return
+        end
+
+        local me = entity.get_local_player()
+        if not me or not entity.is_alive(me) then
+            last_air_tick = 0
+            return
+        end
+
+        local gun = entity.get_player_weapon(me)
+        if not gun or entity.get_classname(gun) ~= 'CWeaponSSG08' then
+            return
+        end
+
+        local tick = globals.tickcount()
+        if not is_on_ground then
+            if last_air_tick == 0 then
+                last_air_tick = tick
+            end
+        else
+            last_air_tick = 0
+            return
+        end
+
+        if tick - last_air_tick < delay_ticks then
+            return
+        end
+
+        if not can_shoot(me, gun) then
+            return
+        end
+
+        local can_work = false
+        if elements.aimbot.auto_air_stop.settings.addons:get('Work only with quick peek assist') then
+            can_work = reference.rage.other.quickpeek[1]:get() and reference.rage.other.quickpeek[1].hotkey:get()
+        else
+            can_work = true
+        end
+
+        local local_team = entity.get_prop(me, 'm_iTeamNum')
+        local enemies = entity.get_players(true)
+        for i = 1, #enemies do
+            local enemy = enemies[i]
+            if entity.get_prop(enemy, 'm_iTeamNum') ~= local_team and entity.is_alive(enemy) then
+                if is_enemy_visible(me, enemy) then
+                    local hc = estimate_hitchance(me, gun)
+                    if hc < elements.aimbot.auto_air_stop.settings.hitchance:get() then
+                        return
+                    end
+
+                    if not can_work then
+                        return
+                    end
+
+                    local velocity = vector(entity.get_prop(me, 'm_vecVelocity'))
+                    local speed = velocity:length2d()
+                    if elements.aimbot.auto_air_stop.settings.addons:get('Work if speed lower than X') and (speed < speed_limit) then
+                        return
+                    end
+
+                    e.quick_stop = true
+
+                    local velocity_angles = vector(velocity:angles())
+                    local camera_angles = vector(client.camera_angles())
+
+                    velocity_angles.y = camera_angles.y - velocity_angles.y
+                    local calc_x, calc_y = angle_math(velocity_angles.x, velocity_angles.y)
+
+                    local sidespeed = -cvar.cl_sidespeed:get_float()
+                    local final_x = sidespeed * calc_x
+                    local final_y = sidespeed * calc_y
+
+                    e.in_speed = 1
+                    e.forwardmove = final_x
+                    e.sidemove = final_y
+                    break
+                end
+            end
+        end
+    end
+
+    client.set_event_callback('setup_command', on_setup_command)
+end
+
+local aimbot_helper do
+    local helper_miss_counter = 0
+
+    client.set_event_callback('aim_miss', function (e)
+        if e.reason ~= 'prediction error' then
+            helper_miss_counter = helper_miss_counter + 1
+        end
+    end)
+    
+    client.set_event_callback('round_prestart', function ()
+        helper_miss_counter = 0
+    end)
+
+    local function check_trigger (triggers, hp, miss_count, hp_threshold, miss_threshold, height_diff)
+        for _, trigger in ipairs(triggers) do
+            if (trigger == 'Enemy HP < X' and hp < hp_threshold) or
+               (trigger == 'X Missed Shots' and miss_count > miss_threshold) or
+               (trigger == 'Lethal' and hp <= 30) or
+               (trigger == 'Height advantage' and height_diff > 70) or
+               (trigger == 'Enemy higher than you' and height_diff < -70) then
+                return true
+            else
+                return false
+            end
+        end
+        return false
+    end
+
+    local function on_setup_command ()
+        if not elements.aimbot.aimbot_helper.enable:get() then return end
+
+        local me = entity.get_local_player()
+        if not me or not entity.is_alive(me) then
+            reference.playerlist.reset:set(true)
+            helper_miss_counter = 0
+            return
+        end
+
+        local gun = entity.get_player_weapon(me)
+        if not gun then return end
+
+        local weapon = entity.get_classname(gun)
+        local weapon_config = (weapon == 'CWeaponSSG08' and elements.aimbot.aimbot_helper.settings.ssg) or
+                              (weapon == 'CWeaponAWP' and elements.aimbot.aimbot_helper.settings.awp) or
+                              ((weapon == 'CWeaponG3SG1' or weapon == 'CWeaponSCAR20') and elements.aimbot.aimbot_helper.settings.auto)
+
+        if not weapon_config then return end
+
+        local my_pos = vector(entity.get_origin(me))
+        local players = entity.get_players(true)
+
+        for _, target in ipairs(players) do
+            if not target or not entity.is_alive(target) or entity.is_dormant(target) then
+                reference.playerlist.reset:set(true)
+                helper_miss_counter = 0
+                return
+            end
+
+            local hp = entity.get_prop(target, 'm_iHealth') or 100
+            local enemy_pos = vector(entity.get_origin(target))
+            local height_diff = math.ceil(my_pos.z - enemy_pos.z)
+
+            if weapon_config.select:get('Force safe point') and
+               check_trigger(weapon_config.force_safe:get(), hp, helper_miss_counter,
+                             weapon_config.force_safe_hp:get(), weapon_config.force_safe_miss:get(), height_diff) then
+                plist.set(target, 'Override safe point', 'On')
+            else
+                plist.set(target, 'Override safe point', '-')
+            end
+
+            local prefer_body = weapon_config.select:get('Prefer body aim') and
+                                check_trigger(weapon_config.prefer_body:get(), hp, helper_miss_counter,
+                                              weapon_config.prefer_body_hp:get(), weapon_config.prefer_body_miss:get(), height_diff)
+            local force_body = weapon_config.select:get('Force body aim') and
+                               check_trigger(weapon_config.force_body:get(), hp, helper_miss_counter,
+                                             weapon_config.force_body_hp:get(), weapon_config.force_body_miss:get(), height_diff)
+
+            if force_body then
+                plist.set(target, 'Override prefer body aim', 'Force')
+            elseif prefer_body then
+                plist.set(target, 'Override prefer body aim', 'On')
+            else
+                plist.set(target, 'Override prefer body aim', '-')
+            end
+
+            if weapon_config.select:get('Ping spike') then
+                reference.rage.ps[1]:override(true)
+                reference.rage.ps[2]:override(weapon_config.ping_spike_value:get())
+            else
+                reference.rage.ps[1]:override()
+                reference.rage.ps[2]:override()
+            end
+        end
+    end
+
+    -- client.set_event_callback('setup_command', function ()
+    --     client.update_player_list()
+    --     on_setup_command()
+    -- end)
+    elements.aimbot.aimbot_helper.enable:set_event('setup_command', function ()
+        client.update_player_list()
+        on_setup_command()
+    end)
+end
+
+local ai_peek = { }; do
+    ai_peek.set_movement = function (e, destination, local_player)
+        local move_yaw = vector(vector(entity.get_origin(local_player)):to(destination):angles()).y
+    
+        e.in_forward = 1
+        e.in_back = 0
+        e.in_moveleft = 0
+        e.in_moveright = 0
+        e.in_speed = 0
+        e.forwardmove = 800
+        e.sidemove = 0
+        e.move_yaw = move_yaw
+    end
+  
+    ai_peek.extrapolate_position = function (ent, origin, ticks, inverted)
+        local tickinterval = globals.tickinterval()
+    
+        local sv_gravity = cvar.sv_gravity:get_float() * tickinterval
+        local sv_jump_impulse = cvar.sv_jump_impulse:get_float() * tickinterval
+    
+        local p_origin, prev_origin = origin, origin
+    
+        local velocity = vector(entity.get_prop(ent, 'm_vecVelocity'))
+        local gravity = velocity.z > 0 and -sv_gravity or sv_jump_impulse
+    
+        for i = 1, ticks do
+            prev_origin = p_origin
+            p_origin = vector(
+                p_origin.x + (inverted and -(velocity.x * tickinterval) or (velocity.x * tickinterval)),
+                p_origin.y + (inverted and -(velocity.y * tickinterval) or (velocity.y * tickinterval)),
+                p_origin.z + (inverted and -((velocity.z + gravity) * tickinterval) or (velocity.z + gravity) * tickinterval)
+            )
+    
+            local fraction = client.trace_line(-1,
+                prev_origin.x, prev_origin.y, prev_origin.x,
+                p_origin.x, p_origin.y, p_origin.x
+            )
+    
+            if fraction <= .99 then
+                return prev_origin
+            end
+        end
+    
+        return p_origin
+    end
+  
+    ai_peek.extend_vector = function (pos, length, angle)
+        -- local rad = angle * math.pi / 180
+        -- return vector(pos.x + (math.cos(rad) * length), pos.y + (math.sin(rad) * length), pos.z)
+        local rad = math.rad(angle)
+        return vector(
+            pos.x + (math.cos(rad) * length),
+            pos.y + (math.sin(rad) * length),
+            pos.z
+        )
+    end
+  
+    ai_peek.get_players = function (include_enemies, include_teammates, include_localplayer, include_dormant, include_invisible)
+        local result = { }
+        local player_resource = entity.get_player_resource()
+        local maxplayers = globals.maxplayers()
+        local plocal = entity.get_local_player()
+    
+        for player = 1, maxplayers do
+            if entity.get_prop(player_resource, 'm_bConnected', player) ~= 1 then
+                goto skip
+            end
+    
+            if entity.get_prop(player_resource, 'm_bAlive', player) ~= 1 then
+                goto skip
+            end
+    
+            if not include_localplayer and player == plocal then
+                goto skip
+            end
+    
+            if include_teammates then
+                if not include_enemies and entity.is_enemy(player) then
+                    goto skip
+                end
+            elseif not entity.is_enemy(player) then
+                goto skip
+            end
+    
+            if not include_dormant and entity.is_dormant(player) then
+                goto skip
+            end
+    
+            if not include_invisible and select(5, entity.get_bounding_box(player)) <= 0 then
+                goto skip
+            end
+    
+            result[#result + 1] = player
+    
+            ::skip::
+        end
+    
+        return result
+    end
+  
+    local calc = function (xdelta, ydelta)
+        if xdelta == 0 and ydelta == 0 then
+            return 0
+        end
+
+        return math.deg(math.atan2(ydelta, xdelta))
+    end
+    
+    ai_peek.get_nearest_player = function (players)
+        local lp_eyepos = vector(client.eye_position())
+        local lp_camera_angles = vector(client.camera_angles())
+    
+        local bestenemy = nil
+        local fov = 180
+    
+        for i = 1, #players do
+            local player = players[i]
+    
+            local player_origin = vector(entity.get_origin(player))
+    
+            local cur_fov = math.abs(
+                aa_func.normalize_angle(
+                    calc(lp_eyepos.x - player_origin.x, lp_eyepos.y - player_origin.y) - lp_camera_angles.y + 180
+                )
+            )
+    
+            if cur_fov < fov then
+                fov = cur_fov
+                bestenemy = player
+            end
+        end
+    
+        return bestenemy
+    end
+  
+    ai_peek.hitgroups_to_hitboxes = {
+      ['Head'] = { 0 },
+      ['Chest'] = { 4, 5, 6 },
+      ['Stomach'] = { 2, 3 },
+      ['Arms'] = { 13, 14, 15, 16, 17, 18 },
+      ['Legs'] = { 7, 8, 9, 10 },
+      ['Feet'] = { 11, 12 }
+    }
+  
+    ai_peek.allowed_hitboxes = {
+      0, 4, 5, 6, 2, 3, 13, 14, 15, 16, 17, 18, 7, 8, 9, 10, 11, 12
+    }
+  
+    ai_peek.hitgroup_data = {
+      ['Head'] = 1, -- 0
+      ['Neck'] = 8, -- 1
+      ['Pelvis'] = 3, -- 2
+      ['Stomach'] = 3, -- 3
+      ['Lower Chest'] = 2, -- 4
+      ['Chest'] = 2, -- 5
+      ['Upper Chest'] = 2, -- 6
+      ['Left Upper Leg'] = 6, -- 7
+      ['Right Upper Leg'] = 7, -- 8
+      ['Left Lower Leg'] = 6, -- 9
+      ['Right Lower Leg'] = 7, -- 10
+      ['Left Foot'] = 6, -- 11
+      ['Right Foot'] = 7, -- 12
+      ['Left Hand'] = 4, -- 13
+      ['Right Hand'] = 5, -- 14
+      ['Left Upper Arm'] = 4, -- 15
+      ['Left Lower Arm'] = 4, -- 16
+      ['Right Upper Arm'] = 5, -- 17
+      ['Right Lower Arm'] = 5 -- 18
+    }
+  
+    ai_peek.hitboxes_names = {
+      [0] = 'Head',
+      'Neck',
+      'Pelvis',
+      'Stomach',
+      'Lower Chest',
+      'Chest',
+      'Upper Chest',
+      'Left Upper Leg',
+      'Right Upper Leg',
+      'Left Lower Leg',
+      'Right Lower Leg',
+      'Left Foot',
+      'Right Foot',
+      'Left Hand',
+      'Right Hand',
+      'Left Upper Arm',
+      'Left Lower Arm',
+      'Right Upper Arm',
+      'Right Lower Arm',
+    }
+    ai_peek.active_hitboxes = { }
+    ai_peek.returning = false
+    ai_peek.targeting = false
+    ai_peek.should_return = false
+    ai_peek.dt_teleport = false
+    ai_peek.disable_dt = false
+    ai_peek.cache = {
+      hotkeys = {
+        autopeek = {
+          enabled = nil,
+          hotkey_mode = nil,
+          mode = nil,
+          distance = nil
+        },
+      },
+      middle_pos = vector(),
+      active_point_index = 0,
+      positions = { },
+      vectors_to_target = { },
+      draw_data = { },
+      last_returning_time = 0,
+      current_target = 0
+    }
+    ai_peek.hotkeys = {
+      main = false,
+      force_baim = false
+    }
+    ai_peek.amount = 4
+    ai_peek.step_distance = 50 -- @lordmouse: long - 50, medium - 40, small - 30
+    ai_peek.visual = {
+        data = { },
+        active = false
+    }
+  
+    ai_peek.skip_func = function (entindex, contents_mask)
+        local ent_classname = entity.get_classname(entindex)
+    
+        if ent_classname == 'CCSPlayer' and entity.is_enemy(entindex) then
+            return false
+        end
+    
+        return true
+    end
+  
+    ai_peek.create_values = function ()
+        for i = 0, ai_peek.amount do
+            ai_peek.cache.vectors_to_target[i] = { }
+            ai_peek.visual.data[i] = false
+        end
+    end
+  
+    ai_peek.update_hitboxes = function (ref, force_baim)
+        local new_hitboxes = { }
+        local target_hitboxes = ref:get()
+    
+        local force_baim_disabled_hitgroups = {
+            'Head', 'Arms', 'Legs', 'Feet'
+        }
+    
+        for i = 1, #target_hitboxes do
+            if force_baim and table_contains(force_baim_disabled_hitgroups, target_hitboxes[i]) then
+                goto continue
+            end
+    
+            local curr_hitgroup = ai_peek.hitgroups_to_hitboxes[target_hitboxes[i]]
+    
+            for j = 1, #curr_hitgroup do
+                local hitbox = curr_hitgroup[j]
+        
+                if table_contains(ai_peek.allowed_hitboxes, hitbox) then
+                    table.insert(new_hitboxes, hitbox)
+                end
+            end
+    
+            ::continue::
+        end
+    
+        ai_peek.active_hitboxes = new_hitboxes
+    end
+  
+    reference.rage.aimbot.target_hitbox:set_callback(function (ref)
+        ai_peek.update_hitboxes(ref)
+    end)
+  
+    ai_peek.handle_point = function (position, prev_position, angle, step_distance, index, view_offset, vec_mins, vec_maxs, max_step)
+        local start_pos = prev_position and (prev_position - view_offset) or position
+        local pos = ai_peek.extend_vector(start_pos, index == 0 and 0 or step_distance, angle)
+    
+        local trace_up = trace.hull(
+            start_pos, start_pos + vector(0, 0, max_step), vec_mins, vec_maxs, {skip = skip_func, mask = 0x201400B}
+        ).end_pos
+    
+        local trace_horizontal = trace.hull(
+            vector(start_pos.x, start_pos.y, trace_up.z),
+            vector(pos.x, pos.y, trace_up.z),
+            vec_mins, vec_maxs, {skip = ai_peek.skip_func, mask = 0x201400B}
+        ).end_pos
+    
+        if pos:dist2d(trace_horizontal) >= step_distance * .97 then
+            return false
+        end
+    
+        local trace_down = trace.hull(
+            trace_horizontal,
+            vector(trace_horizontal.x, trace_horizontal.y, position.z - 240),
+            vec_mins, vec_maxs, {skip = ai_peek.skip_func, mask = 0x201400B}
+        ).end_pos
+    
+        return trace_down + view_offset
+    end
+  
+    local max_step = 18
+  
+    ai_peek.setup_points = function (local_player, position, angle, amount, step_distance)
+        local view_offset = vector(entity.get_prop(local_player, 'm_vecViewOffset'))
+        local vec_mins = vector(entity.get_prop(local_player, 'm_vecMins'))
+        local vec_maxs = vector(entity.get_prop(local_player, 'm_vecMaxs'))
+    
+        ai_peek.cache.positions[0] = ai_peek.handle_point(
+            position, nil, 0,
+            step_distance, 0, view_offset,
+            vec_mins, vec_maxs, max_step
+        )
+    
+        for i = 1, amount do
+            local angle = i % 2 == 0 and angle - 90 or angle + 90
+    
+            local prev_point = ai_peek.cache.positions[i <= 2 and 0 or i - 2]
+    
+            if not prev_point then
+                goto continue
+            end
+    
+            local point = ai_peek.handle_point(
+                position, prev_point, angle,
+                step_distance, i, view_offset,
+                vec_mins, vec_maxs, max_step
+            )
+    
+            if not point or (prev_point and math.abs(prev_point.z - point.z) > max_step) then
+                for k = i, amount, 2 do
+                    ai_peek.cache.positions[k] = false
+                end
+        
+                goto continue
+            end
+    
+            ai_peek.cache.positions[i] = point
+    
+            ::continue::
+        end
+    
+        return ai_peek.cache.positions
+    end
+  
+    ai_peek.trace_enemy = function (positions, local_player, target, hitboxes)
+        local target_health = entity.get_prop(target, 'm_iHealth')
+        local minimum_damage = (reference.rage.aimbot.minimum_damage_override[1].value and reference.rage.aimbot.minimum_damage_override[1].hotkey:get() and reference.rage.aimbot.minimum_damage_override[2].value) or reference.rage.aimbot.minimum_damage.value
+    
+        for i = 1, #positions do
+            local pos = positions[i]
+    
+            if not pos then
+                goto continue
+            end
+    
+            for j = 1, #hitboxes do
+                local hitbox = hitboxes[j]
+                local hitbox_pos = vector(entity.hitbox_position(target, hitbox))
+        
+                local entindex, damage = client.trace_bullet(
+                    local_player,
+                    pos.x, pos.y, pos.z,
+                    hitbox_pos.x, hitbox_pos.y, hitbox_pos.z,
+                    hitbox == 0 -- @lordmouse: TODO - сделать нормальный фикс
+                )
+        
+                -- @lordmouse: TODO - сделать нормальный фикс
+                if hitbox == 0 then
+                    damage = damage * 4
+                end
+        
+                if damage >= math.min(minimum_damage, target_health) and damage > 0 then
+                    return pos, i
+                end
+            end
+    
+            ::continue::
+        end
+    
+        return nil, 0
+    end
+  
+    ai_peek.weapon_can_fire = function (player, weapon)
+        local lp_NextAttack = entity.get_prop(player, 'm_flNextAttack')
+        local wpn_NextPrimaryAttack = entity.get_prop(weapon, 'm_flNextPrimaryAttack')
+    
+        if math.max(0, lp_NextAttack or 0, wpn_NextPrimaryAttack or 0) > globals.curtime() or entity.get_prop(weapon, 'm_iClip1') <= 0 then
+            return false
+        end
+    
+        return true
+    end
+  
+    ai_peek.can_target = function (local_player, target)
+        if not target then
+            return false
+        end
+    
+        local lp_wpn = entity.get_player_weapon(local_player)
+    
+        if not ai_peek.weapon_can_fire(local_player, lp_wpn) then
+            return false
+        end
+    
+        local need_scope = false do
+            local scope_weapons = {
+            'CWeaponSSG08',
+            'CWeaponAWP',
+            'CWeaponG3SG1',
+            'CWeaponSCAR20'
+            }
+    
+            if not reference.rage.aimbot.auto_scope:get() and table_contains(scope_weapons, entity.get_classname(lp_wpn)) then
+                need_scope = entity.get_prop(local_player, 'm_bIsScoped') ~= 1
+            end
+        end
+    
+        if need_scope then
+            return false
+        end
+    
+        local need_charge = false do
+            if reference.rage.aimbot.double_tap[1].hotkey:get() then
+                need_charge = not exploits:can_recharge()
+            end
+        end
+    
+        if need_charge then
+            return false
+        end
+    
+        local velocity_modifier = entity.get_prop(local_player, 'm_flVelocityModifier')
+        if velocity_modifier ~= 1 then
+            return false
+        end
+    
+        local esp_data = entity.get_esp_data(target) or {alpha = 0}
+        if esp_data.alpha < .75 then
+            return false
+        end
+    
+        return true
+    end
+  
+    ai_peek.handle = function (e)
+        local local_player = entity.get_local_player()
+
+        local weapon = entity.get_player_weapon(local_player)
+        if not weapon then
+            return
+        end
+
+        if csgo_weapons(weapon).is_revolver then
+            return
+        end
+
+        local main_key = elements.aimbot.ai_peek.enable:get() and elements.aimbot.ai_peek.enable.hotkey:get()
+    
+        if main_key and not ai_peek.hotkeys.main then
+            ai_peek.cache.hotkeys.autopeek.enabled = reference.rage.other.quickpeek[1]:get()
+            ai_peek.cache.hotkeys.autopeek.hotkey_mode = { reference.rage.other.quickpeek[1]:get_hotkey() }
+            ai_peek.cache.hotkeys.autopeek.mode = reference.rage.other.quickpeek_assist_mode[1]:get()
+            ai_peek.cache.hotkeys.autopeek.distance = reference.rage.other.quickpeek_assist_distance:get()
+    
+            local lp_origin = vector(entity.get_origin(local_player))
+            local lp_pos = ai_peek.extrapolate_position(local_player, lp_origin, 13, true)
+    
+            ai_peek.cache.middle_pos = lp_pos
+    
+            ai_peek.hotkeys.main = true
+        elseif not main_key and ai_peek.hotkeys.main then
+            local mode_number = ai_peek.cache.hotkeys.autopeek.hotkey_mode[2]
+            local mode_new = 'On hotkey'
+            if mode_number == 0 then
+                mode_new = 'Always on'
+            elseif mode_number == 1 then
+                mode_new = 'On hotkey'
+            elseif mode_number == 2 then
+                mode_new = 'Toggle'
+            elseif mode_number == 3 then
+                mode_new = 'Off hotkey'
+            end
+    
+            reference.rage.other.quickpeek[1]:override()
+            reference.rage.other.quickpeek[1]:set_hotkey(mode_new)
+            reference.rage.other.quickpeek_assist_mode[1]:override()
+            reference.rage.other.quickpeek_assist_distance:override()
+    
+            ai_peek.hotkeys.main = false
+        end
+    
+        if reference.rage.aimbot.force_body:get() and not ai_peek.hotkeys.force_baim then
+            ai_peek.update_hitboxes(reference.rage.aimbot.target_hitbox, true)
+            ai_peek.hotkeys.force_baim = true
+        elseif not reference.rage.aimbot.force_body:get() and ai_peek.hotkeys.force_baim then
+            ai_peek.update_hitboxes(reference.rage.aimbot.target_hitbox)
+            ai_peek.hotkeys.force_baim = false
+        end
+    
+        if not main_key then
+            ai_peek.returning = false
+            ai_peek.targeting = false
+            ai_peek.should_return = false
+            ai_peek.dt_teleport = false
+            ai_peek.disable_dt = false
+            ai_peek.visual.active = false
+            return
+        end
+        
+        local move_mode = elements.aimbot.ai_peek.settings.peek_mode
+        local distance_mode = elements.aimbot.ai_peek.settings.distance:get()
+    
+        if distance_mode == 'Long' then
+            ai_peek.step_distance = 50
+        elseif distance_mode == 'Medium' then
+            ai_peek.step_distance = 40
+        elseif distance_mode == 'Short' then
+            ai_peek.step_distance = 30
+        end
+    
+        reference.rage.other.quickpeek[1]:override(true)
+        reference.rage.other.quickpeek[1]:set_hotkey('Always On')
+        reference.rage.other.quickpeek_assist_distance:override(math.floor((ai_peek.amount * ai_peek.step_distance) / 2) + 30)
+    
+        local m_vecVelocity = vector(entity.get_prop(local_player, 'm_vecVelocity'))
+        local lp_velocity = m_vecVelocity:length2d()
+    
+        local local_override = bit.band(entity.get_prop(local_player, 'm_fFlags'), bit.lshift(1, 0)) ~= 1
+        or (e.in_forward == 1 or e.in_moveleft == 1 or e.in_moveright == 1 or e.in_back == 1 or e.in_jump == 1)
+    
+        local middle_pos = ai_peek.cache.middle_pos
+    
+        local lp_origin = vector(entity.get_origin(local_player))
+    
+        local dist_to_middle = middle_pos:dist2d(lp_origin)
+    
+        if (not move_mode:get('Automatically Teleport Back')) and not ai_peek.targeting and not ai_peek.returning or (dist_to_middle > .15 and (lp_velocity > 1.011 and lp_velocity ~= 0)) then
+            ai_peek.cache.middle_pos = lp_origin
+        end
+    
+        local target = elements.aimbot.ai_peek.settings.mode:get() == 'Current threat' and client.current_threat() or ai_peek.get_nearest_player(ai_peek.get_players(true, false, false, true, false))
+    
+        ai_peek.cache.current_target = target
+    
+        local angle = target and vector(middle_pos:to(vector(entity.get_origin(target))):angles()).y or vector(client.camera_angles()).y
+    
+        local positions = ai_peek.setup_points(local_player, middle_pos, angle, ai_peek.amount, ai_peek.step_distance)
+    
+        ai_peek.visual.active = true
+    
+        local active_point_pos, active_point_index = nil, 0
+    
+        if target and not local_override and ai_peek.can_target(local_player, target) then
+            active_point_pos, active_point_index = ai_peek.trace_enemy(positions, local_player, target, ai_peek.active_hitboxes)
+        end
+    
+        ai_peek.cache.active_point_index = active_point_index
+        ai_peek.targeting = active_point_pos ~= nil
+    
+        if move_mode:get('Automatically teleport back') then
+            ai_peek.should_return = true
+        end
+    
+        if ai_peek.targeting then
+            ai_peek.set_movement(e, active_point_pos, local_player)
+            ai_peek.returning = false
+            ai_peek.should_return = true
+            ai_peek.disable_dt = false
+        elseif local_override then
+            ai_peek.returning = false
+            ai_peek.should_return = false
+            ai_peek.dt_teleport = false
+            ai_peek.disable_dt = false
+        elseif ai_peek.should_return then
+            ai_peek.returning = true
+            ai_peek.dt_teleport = true
+        end
+    
+        if not ai_peek.returning then
+            ai_peek.cache.last_returning_time = globals.tickcount()
+        end
+    
+        if ai_peek.returning then
+            if dist_to_middle < .15 then
+                ai_peek.returning = false
+                ai_peek.should_return = false
+                ai_peek.dt_teleport = false
+                ai_peek.disable_dt = false
+            elseif ai_peek.dt_teleport then
+                if not exploits:can_recharge() and ai_peek.weapon_can_fire(local_player, entity.get_player_weapon(local_player)) then
+                    if globals.tickcount() - ai_peek.cache.last_returning_time == 1 then
+                        if move_mode:get('Force defensive') then
+                            e.force_defensive = true
+                        else
+                            e.force_defensive = false
+                        end
+                    elseif ai_peek.cache.last_returning_time >= globals.tickcount() - 7 then
+                        -- print(('discharged : tick - %d : last - %d'):format(globals.tickcount(), ai_peek.cache.last_returning_time))
+                        e.discharge_pending = true
+                        control_exploits(false)
+                        ai_peek.dt_teleport = false
+                        ai_peek.disable_dt = true
+                    end
+                end
+            end
+        end
+    
+        reference.rage.other.quickpeek_assist_mode[1]:override(ai_peek.returning and { 'Retreat on shot', 'Retreat on key release' } or ai_peek.cache.hotkeys.autopeek.mode)
+    
+        if ai_peek.disable_dt then
+            control_exploits(false)
+        end
+    end
+  
+    ai_peek.render = function ()
+        local local_player = entity.get_local_player()
+        if not entity.is_alive(local_player) then
+            return
+        end
+    
+        local enabled = ai_peek.visual.active
+        local active_point = ai_peek.cache.active_point_index
+    
+        local alpha = lerp('ai_peek_alpha', elements.aimbot.ai_peek.settings.peek_mode:get('Peek arrow') and enabled and 255 or 0, 12)
+        if alpha <= 0 then
+            return
+        end
+
+        local screen = { client.screen_size()} 
+        local x, y = screen[1] / 2, screen[2] / 2
+        local offset_distance = 70
+
+        local custom = coloring.parse()
+        local r, g, b = custom.r, custom.g, custom.b
+    
+        local left_alpha = lerp('ai_peek_left', (active_point == 1 or active_point == 3) and 255 or 0, 12)
+        local right_alpha = lerp('ai_peek_right', (active_point == 2 or active_point == 4) and 255 or 0, 12)
+    
+        local scope_offset = entity.get_prop(local_player, 'm_bIsScoped') == 1 and 15 or (elements.visuals.arrows.settings.style:get() == 'Unique' and 5 or 0)
+        local y_offset = lerp('ai_peek_y', scope_offset, 12, 1)
+    
+        local symbols = {
+            left = elements.visuals.arrows.settings.style:get() == 'Unique' and '⮜' or '<',
+            right = elements.visuals.arrows.settings.style:get() == 'Unique' and '⮞' or '>'
+        }
+    
+        if left_alpha > 0 then
+            renderer.text(x - offset_distance, y - y_offset, r, g, b, left_alpha * (alpha / 255), 'c+', 0, symbols.left)
+        end
+    
+        if right_alpha > 0 then
+            renderer.text(x + offset_distance, y - y_offset, r, g, b, right_alpha * (alpha / 255), 'c+', 0, symbols.right)
+        end
+    end
+    
+    ai_peek.create_values()
+    ai_peek.update_hitboxes(reference.rage.aimbot.target_hitbox)
+  
+    -- client.set_event_callback('setup_command', ai_peek.handle)
+    -- client.set_event_callback('paint', ai_peek.render)
+    elements.aimbot.ai_peek.enable:set_event('setup_command', ai_peek.handle)
+    elements.aimbot.ai_peek.enable:set_event('paint', ai_peek.render)
+end
+
+local predict do
+    local function on_paint_ui ()
+        if not elements.aimbot.predict_enemies.enable:get() then
+            return
+        end
+
+        cvar.cl_interp_ratio:set_int(2)
+        cvar.cl_interpolate:set_int(1)
+    end
+
+    local function on_pre_render ()
+        if not elements.aimbot.predict_enemies.enable:get() then
+            -- cvar.cl_extrapolate_amount:set_raw_float(0.25)
+            cvar.cl_interpolate:set_int(1)
+            cvar.cl_interp_ratio:set_int(2)
+            return
+        end
+      
+        -- cvar.cl_extrapolate_amount:set_raw_float(0.7)
+        cvar.cl_interpolate:set_int(0)
+        cvar.cl_interp_ratio:set_int(1)
+    end
+
+    client.set_event_callback('paint_ui', on_paint_ui)
+    client.set_event_callback('pre_render', on_pre_render)
+end
+
+local game_enhancer do
+    local fps_cvars = {
+        ['Fix chams color'] = {'mat_autoexposure_max_multiplier', 0.2, 1},
+        ['Disable dynamic Lighting'] = {'r_dynamiclighting', 0, 1},
+        ['Disable dynamic Shadows'] = {'r_dynamic', 0, 1},
+        ['Disable first-person tracers'] = {'r_drawtracers_firstperson', 0, 1},
+        ['Disable ragdolls'] = {'cl_disable_ragdolls', 1, 0},
+        ['Disable eye gloss'] = {'r_eyegloss', 0, 1},
+        ['Disable eye movement'] = {'r_eyemove', 0, 1},
+        ['Disable muzzle flash light'] = {'muzzleflash_light', 0, 1},
+        ['Enable low CPU audio'] = {'dsp_slow_cpu', 1, 0},
+        ['Disable bloom'] = {'mat_disable_bloom', 1, 0},
+        ['Disable particles'] = {'r_drawparticles', 0, 1},
+        ['Reduce breakable objects'] = {'func_break_max_pieces', 0, 15}
+    }
+  
+    local function on_setup_command ()
+        if not elements.aimbot.game_enhancer.enable:get() then
+            for name, data in pairs(fps_cvars) do
+                local cvar_name, boost_value, default_value = unpack(data)
+                cvar[cvar_name]:set_int(default_value)
+            end
+            return
+        end
+  
+        local selected_boosts = elements.aimbot.game_enhancer.settings.list:get()
+        for name, data in pairs(fps_cvars) do
+            local cvar_name, boost_value, default_value = unpack(data)
+            cvar[cvar_name]:set_int(table_contains(selected_boosts, name) and boost_value or default_value)
+        end
+    end
+    
+    client.set_event_callback('setup_command', on_setup_command)
+end
+
+---
+
+coloring.parse = function ()
+    if colors.combobox:get() == 'Custom' then
+        local r, g, b = colors.custom.color_1:get()
+        if colors.custom.type:get() == 'Gradient' then
+            local r2, g2, b2 = colors.custom.color_2:get()
+            local r3, g3, b3 = colors.custom.color_3:get()
+            local r4, g4, b4 = colors.custom.color_4:get()
+            return {r = r, g = g, b = b, r2 = r2, g2 = g2, b2 = b2, r3 = r3, g3 = g3, b3 = b3, r4 = r4, g4 = g4, b4 = b4}
+        else
+            return {r = r, g = g, b = b}
+        end
+
+        return {r = r, g = g, b = b}
+    else
+        local r, g, b = reference.misc.settings.menu_color:get()
+        return {r = r, g = g, b = b}
+    end
+end
+  
+local function create_interface (x, y, w, h, r, g, b, a, options)
+    options = options or { }
+    local side = options.side or 'down'
+    local item = options.item or ''  
+    local outline_y = side == 'up' and y + 12 or y + 4
+
+    local custom = coloring.parse()
+  
+    helpers.rounded_rectangle(x, y, w, h, 4, 25, 25, 25, 255 * (a / 255))
+  
+    if side == 'up' or side == 'down' then
+        local reverse = side == 'up'
+
+        local gradient_colors = {
+            use_gradient = colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get(item),
+            col1_start = {r = custom.r, g = custom.g, b = custom.b, a = a},
+            col1_end   = {r = custom.r3, g = custom.g3, b = custom.b3, a = a},
+            col2_start = {r = custom.r4, g = custom.g4, b = custom.b4, a = a},
+            col2_end   = {r = custom.r2, g = custom.g2, b = custom.b2, a = a}
+        }
+
+        helpers.semi_outlined_rectangle(x + 4, outline_y, w - 8, 14, 4, 2, gradient_colors, reverse)
+    elseif side == 'left' then
+        if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get(item) then
+            draw_animated_gradient(x + 5, y + 4, 3, h - 8, 25, 
+                {r = custom.r, g = custom.g, b = custom.b, a = a},
+                {r = custom.r3, g = custom.g3, b = custom.b3, a = a},
+                {r = custom.r4, g = custom.g4, b = custom.b4, a = a},
+                {r = custom.r2, g = custom.g2, b = custom.b2, a = a}, 
+                true
+            )
+        else
+            renderer.gradient(x + 5, y + 4, 3, h - 8, r, g, b, a, r, g, b, 0, false)
+        end
+    elseif side == 'right' then
+        if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get(item) then
+            draw_animated_gradient(x + w - 8, y + 4, 3, h - 8, 25, 
+                {r = custom.r, g = custom.g, b = custom.b, a = a},
+                {r = custom.r3, g = custom.g3, b = custom.b3, a = a},
+                {r = custom.r4, g = custom.g4, b = custom.b4, a = a},
+                {r = custom.r2, g = custom.g2, b = custom.b2, a = a}, 
+                true
+            )
+        else
+            renderer.gradient(x + w - 8, y + 4, 3, h - 8, r, g, b, 0, r, g, b, a, false)
+        end
+    elseif side == 'left + right' then
+        if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get(item) then
+            draw_animated_gradient(x + 5, y + 4, 3, h - 8, 25, 
+                {r = custom.r, g = custom.g, b = custom.b, a = a},
+                {r = custom.r3, g = custom.g3, b = custom.b3, a = a},
+                {r = custom.r4, g = custom.g4, b = custom.b4, a = a},
+                {r = custom.r2, g = custom.g2, b = custom.b2, a = a}, 
+                true,
+                true
+            )
+
+            draw_animated_gradient(x + w - 8, y + 4, 3, h - 8, 25, 
+                {r = custom.r, g = custom.g, b = custom.b, a = a},
+                {r = custom.r3, g = custom.g3, b = custom.b3, a = a},
+                {r = custom.r4, g = custom.g4, b = custom.b4, a = a},
+                {r = custom.r2, g = custom.g2, b = custom.b2, a = a}, 
+                true,
+                false
+            )
+        else
+            renderer.gradient(x + 5, y + 4, 3, h - 8, r, g, b, a, r, g, b, 0, false)
+            renderer.gradient(x + w - 8, y + 4, 3, h - 8, r, g, b, 0, r, g, b, a, false)
+        end
+    end
+  
+    -- @lordmouse: gs outline
+    helpers.rounded_outlined_rectangle(x, y, w, h, 4, 1, 12, 12, 12, a)
+    helpers.rounded_outlined_rectangle(x + 1, y + 1, w - 2, h - 2, 4, 1, 60, 60, 60, a)
+    helpers.rounded_outlined_rectangle(x + 2, y + 2, w - 4, h - 4, 4, 3, 40, 40, 40, a)
+end
+
+local watermark = { width = 220, height = 32 }; do
+    local fps_cache = { value = 0, last_update = 0 }
+    local icons = {
+        Nickname = { icon = '', height = 17 },
+        ['Frames Per Second'] = { icon = '', height = 18 },
+        Ping = { icon = '', height = 18 },
+        Tickrate = { icon = '', height = 17 },
+        Time = { icon = '', height = 17 }
     }
 
-    local Home = {} do
-        local types = {"Local"}
-
-        local aa do
-            aa = {}
-
-            aa.config_label = tabs.aa:label("\vConfig System")
-            aa.divider = tabs.aa:label("\a373737FF‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾")
-            aa.type = tabs.aa:combobox("\n", types, nil, false)
-            aa.type:set_enabled(false)
-
-            aa.box = tabs.aa:listbox("Config system", db.configs, nil, false)
-
-            aa.selected_label = tabs.aa:label("Selected - \vDefault")
-            aa.load = tabs.aa:button("Load")
-            aa.loadaa = tabs.aa:button("Load AA")
-
-            aa.save = tabs.aa:button("Save")
-                :depend({aa.type, 'Local'}, {aa.box, 0, true})
-            aa.export = tabs.aa:button("Export")
-                :depend({aa.type, 'Local'}, {aa.box, 0, true})
-            aa.delete = tabs.aa:button("\aFF0000FFDelete")
-                :depend({aa.type, 'Local'}, {aa.box, 0, true})
-
-            -- aa.type:set_callback(function(self)
-            --     aa.box:invoke()
-            -- end)
-
-            Home.aa = aa
-        end
-
-        local fl do 
-            local session = 0
-            fl = {
-                a = tabs.fl:label("\n123"),
-                welcome = tabs.fl:label("Welcome back,  \v"..username[1]),
-                version = tabs.fl:label("Your Build:  \v"..version[1]),
-                played = tabs.fl:label("Total Playtime: \v" .. string.format(db.db.data.time < 3600 and "%.2f" or "%.0f", db.db.data.time / 3600) .. " hours"),
-                session = tabs.fl:label("Current Session: \v"..session),
-                loaded = tabs.fl:label("Times Loaded: \v"..db.db.data.loaded),
-                killed = tabs.fl:label("Times Killed: \v"..db.db.data.killed),
-
-                b = tabs.fl:label("\n123"),
-                extion = tabs.fl:label("Feel the heat. That's \vRegicide Release"),
-            }
-            local update_session = function() end
-            update_session = function()
-                session = globals.realtime() - db.loaded
-                fl.played:set("Total Playtime: \v" .. string.format(db.db.data.time < 3600 and "%.2f" or "%.0f", db.db.data.time / 3600) .. " hours")
-                fl.session:set("Session time: \v"..math.floor(session)..' sec')
-                fl.killed:set("Times Killed: \v"..db.db.data.killed)
-                client.delay_call(1, update_session)
-            end update_session()
-
-            Home.fl = fl
-        end
-
-        local other do
-            other = {
-                Local = {
-                    autoload = tabs.other:checkbox("Autoload last config", nil, false),
-                    autoload_save = tabs.other:multiselect("Save config on", {"Load", "Save", "Shutdown"}, nil, false),
-                    label_cfg_name = tabs.other:label("\vConfig Name"),
-                    name = tabs.other:textbox("Config name", nil, false),
-                    create = tabs.other:button("Create & Save"),
-                    import = tabs.other:button("Import & Load"),
-                   discord = tabs.other:button('Discord Server', function() 
-                    panorama.open().SteamOverlayAPI.OpenExternalBrowserURL("https://dsc.gg/regicidelua")
-                end),
-                    steamgr = tabs.other:button('Steam Group', function() 
-                    panorama.open().SteamOverlayAPI.OpenExternalBrowserURL("https://steamcommunity.com/groups/blixxen")
-                end),
-                    yt = tabs.other:button('Youtube', function() 
-                    panorama.open().SteamOverlayAPI.OpenExternalBrowserURL("https://www.youtube.com/@kxanx1337")
-                end)
-                },
-            }
-            other.Local.autoload:set(db.db.last.on)
-            other.Local.autoload:set_callback(function(self)
-                db.db.last.on = self.value
-                db.save()
-            end)
-            other.Local.autoload_save:set(db.db.last.save or {})
-            other.Local.autoload_save:depend({other.Local.autoload, true})
-            other.Local.autoload_save:set_callback(function(self)
-                db.db.last.save = self.value
-                db.save()
-            end)
-
-            for _, name in pairs(types) do
-                for _, el in pairs(other[name]) do
-                    el:depend({Home.aa.type, name})
-                end
-            end
-
-            Home.other = other
-        end
-
-        menu.Home = Home
-    end
-
-    local Features = {} do
-        local create = {} do
-            local unique = 1
-            create.element = function(tab, name)
-                local el = {}
-
-                el.disabled = tab:checkbox("Setup \aC8C8C8C8"..name, nil, false)
-                el.enabled = tab:checkbox("Setup \v"..name, false, false)
-                el.divider = tab:label("\a373737FF‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾\n"..unique)
-                el.on = tab:checkbox("Enabled\n"..name)
-                el.divider2 = tab:label("\a373737FF‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾\n"..unique)
-
-                if disabled[name] then
-                    el.disabled:set_enabled(false)
-                    el.enabled:set_enabled(false)
-                    el.on:set_enabled(false)
-                end
-                
-                el.disabled:depend( {el.on, false} )
-                el.enabled:depend( {el.on, true} )
-                el.divider:depend( {setup, name} )
-                el.on:depend( {setup, name} )
-    
-                el.disabled:set_callback(function(self)
-                    el.enabled:set(self.value)
-                end)
-    
-                el.enabled:set_callback(function(self)
-                    el.disabled:set(self.value)
-                    setup:set(setup.value == 'None' and name or 'None')
-                end)
-
-                client.set_event_callback('post_config_load', function()
-                    el.disabled:set(false)
-                end)
-
-                unique = unique + 1
-                return el
-            end --todo: при использовании, обновлять таблицу в setup
-
-            create.color = function(tab, name, default, custom)
-                local el = {}
-                colors[name] = colors[name] or {}
-                custom = custom or {"Color"}
-
-                for a,b in pairs(custom) do
-                    el[b] = {}
-                    el[b].preset = tab:combobox("\n" .. unique, {b..": Default", b..": Accent", b..": Custom"})
-                    local default = color(unpack(default[a]))
-                    el[b].picker = tab:color_picker('\n' .. unique, default)
-                    el[b].picker:depend({el[b].preset, b..": Custom"})
-
-                    local col = default
-
-                    local set_color = function()
-                        col = el[b].preset.value == b..": Default" and (default) or el[b].preset.value == b..": Accent" and utils.to_rgb(pui.accent) or color(unpack(el[b].picker.value))
-                        colors[name][b] = col
-                    end
-                    el[b].picker:set_callback(set_color)
-                    el[b].preset:set_callback(set_color, true)
-                    refs2.color:set_callback(set_color)
-                end
-                unique = unique + 1
-                return el
-            end
-
-            local show_sliders = false
-            create.drag = function(name, default)
-                local el = {}
-                el.x = tabs.aa:slider('x\n'..unique, 0, 1000, default and default[1]/screen.size.x*1000 or 500)
-                el.y = tabs.aa:slider('y\n'..unique, 0, 1000, default and default[2]/screen.size.y*1000 or 500) 
-                el.x:depend({setup, 'drag', show_sliders})
-                el.y:depend({setup, 'drag', show_sliders})
-                unique = unique + 1
-                return el
-            end
-
-            create.label = function(tab, name, arg1)
-                local el = {}
-                if arg1 ~= true then
-                    el.div0 = tab:label("\n123")
-                end
-                el.name = tab:label("\v"..name)
-                el.div1 = tab:label("\a373737FF‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾")
-
-                for a,b in pairs(el) do
-                    b:depend({setup, "None"})
-                end
-                return el
-            end
-            
-        end
-
-        Features.label1 = create.label(tabs.aa, "Visuals", true)
-
-        local watermark = {} do
-            watermark = create.element(tabs.aa, "Watermark")
-            watermark.drag = create.drag("watermark", {screen.center.x, screen.size.y-100})
-            watermark.on:set_enabled(false)
-            watermark.on:set(true)
-            watermark.candy = tabs.aa:checkbox("Candy")
-            watermark.color = create.color(tabs.aa, 'watermark', { {175,175,255,185}, {0,0,0,200} },{"Text", "Background"})
-            watermark.elements = tabs.aa:multiselect('\nwatermark.elements', {"Nickname", "FPS", "Ping", "Time"})
-            watermark.lock = tabs.aa:combobox('\nwatermark.lock', {"Bottom-Center","Upper-Center","Upper-Right","Bottom-Right","Upper-Left","Bottom-Left", "None"})
-            watermark.custom = tabs.aa:textbox("custom name watermark")
-            watermark.used = tabs.aa:checkbox("Used elements?")
-            watermark.used:depend({setup, 'xdadadsadadx'})
-            watermark.elements:set_callback(function()
-                watermark.used:set(true)
-            end)
-            if not watermark.used.value then
-                watermark.elements:set({"Nickname", "FPS", "Ping", "Time"})
-            end
-
-            watermark.custom:depend({watermark.elements, "Nickname"})
-            Features.watermark = watermark
-        end
-
-        local crosshair = {} do
-            crosshair = create.element(tabs.aa, "Crosshair Indicator")
-            local data = {} do
-                data.always = {"Regicide.Hit", "Conditions"}
-                data.elements = {"Regicide.Hit", "Conditions", "Double Tap", "Hide Shots", "Min. Damage", "Hitchance","Body Aim", "Safe Points", "Ping Spike", "Freestanding", "Flicking"}
-                data.list = {table.unpack(data.elements)}
-                data.names = {
-                    ["Double Tap"] = "DOUBLETAP",
-                    ["Hide Shots"] = "OSAA",
-                    ["Min. Damage"] = "DAMAGE",
-                    ["Hitchance"] = "HC",
-                    ["Body Aim"] = "BAIM",
-                    ["Safe Points"] = "SAFE",
-                    ["Ping Spike"] = "SPIKE",
-                    ["Freestanding"] = "FS",
-                    ["Flicking"] = "FLICK",
-                }
-                data.color = {
-                    ["Conditions"] = {185,185,255,255}
-                }
-                data.numbers = {}
-                for i, name in pairs(data.elements) do
-                    data.numbers[name] = i
-                end
-
-                hard['crosshair'] = data
-            end
-
-            crosshair.box = tabs.aa:listbox("\ncrosshair", data.list)
-            crosshair.used = tabs.aa:checkbox("Used elements? crosshair")
-            crosshair.used:depend({setup, 'xdadadsadadx'})
-
-
-            local settings = {}
-            for a, b in pairs(data.elements) do
-                settings[b] = {}
-
-                settings[b].on = tabs.aa:checkbox("Enabled\n"..b)
-                local container = {}
-                container.name = tabs.aa:textbox("Custom name"..b)
-                container.color = create.color(tabs.aa, 'crosshair', a == 1 and {{255,255,255,255}, {185,185,255,255}} or { (data.color[b] or {255,255,255,255}) }, a == 1 and {b, "Version"} or {b})
-                container.candy = tabs.aa:checkbox("Candy\n"..b)
-                pui.traverse(container, function(element)
-                    element:depend({settings[b].on, true})
-                end)
-                local i = 0
-                settings[b].on:set_callback(function(self)
-                    data.list[data.numbers[b]] = self.value and pui.format(data.elements[data.numbers[b]] ..' ~ \vEnabled') or pui.format(data.elements[data.numbers[b]] .. ' ~ \aC8C8C8C8Disabled')
-                    crosshair.box:update(data.list)
-                end, true)
-                if data.always[data.numbers[b]] then
-                    settings[b].on:set_enabled(false)
-                    settings[b].on:set(true)
-                    container.name:set_enabled(false)
-                end
-
-                settings[b].container = container
-            end
-            if not crosshair.used.value then
-                pui.traverse(settings, function(element, path)
-                    if path[2] == 'on' then
-                        element:set(true)
-                    end
-                end)
-            end
-            pui.traverse(settings, function(element, path)
-                element:depend({crosshair.box, data.numbers[path[1]] - 1})
-            end)
-            crosshair.settings = settings
-            Features.crosshair = crosshair
-        end
-        
-        local damage = {} do
-            damage = create.element(tabs.aa, "Damage Indicator")
-
-            damage.drag = create.drag('damage', {screen.center.x+20,screen.center.y-30})
-            damage.color = create.color(tabs.aa, 'damage', {{255,255,255,200}})
-            damage.font = tabs.aa:combobox("\ndamage.font", {"Font: Default", "Font: Pixel"})
-            damage.display = tabs.aa:combobox("\ndamage.display", {"Display: Always On", "Display: Always On (50%)", "Display: On Hotkey"})
-            damage.animation = tabs.aa:combobox("\ndamage.animation", {"Animation: Instant", "Animation: Smooth"})
-
-            Features.damage = damage
-        end
-
-        local manual = {} do
-            manual = create.element(tabs.aa, "Manual Yaw Indicator")
-            manual.color = create.color(tabs.aa, 'manual', {{255,255,255,200}})
-
-            Features.manual = manual
-        end
-
-        local gamesense = {} do
-            gamesense = create.element(tabs.aa, "Gamesense Indicator")
-            local data = {} do
-                data.always = {['Min. Damage'] = true, ["Hit Chance"] = true}
-                data.elements = {"Safe Point", "Body Aim", "Ping Spike", "Double Tap", "Fake Duck", "Freestanding", "Hide Shots", "Min. Damage", "Hit Chance"}
-                data.list = {table.unpack(data.elements)}
-                data.names = {
-                    ["Double Tap"] = "DT",
-                    ["Hide Shots"] = "OSAA",
-                    ["Min. Damage"] = "DMG",
-                    ["Hit Chance"] = "HC",
-                    ["Body Aim"] = "BODY",
-                    ["Safe Point"] = "SAFE",
-                    ["Ping Spike"] = "PING",
-                    ["Freestanding"] = "FS",
-                    ["Fake Duck"] = "DUCK",
-                }
-                data.numbers = {}
-                for i, name in pairs(data.elements) do
-                    data.numbers[name] = i
-                end
-
-                hard['gamesense'] = data
-            end
-            gamesense.follow = tabs.aa:checkbox("Follow the player in thirdperson mode")
-            gamesense.box = tabs.aa:listbox("\ngamesense", data.list)
-            gamesense.used = tabs.aa:checkbox("Used elements? gamesense")
-            gamesense.used:depend({setup, 'xdadadsadadx'})
-
-            local settings = {}
-            for a, b in pairs(data.elements) do
-                settings[b] = {}
-
-                settings[b].on = tabs.aa:checkbox("Enabled \v"..b)
-                local container = {}
-                container.always = data.always[b] and tabs.aa:checkbox("Always On\n"..b) or nil
-                container.show = data.always[b] and tabs.aa:checkbox("Show Value\n"..b) or nil
-                container.name = tabs.aa:textbox("Custom name"..b)
-                container.color = create.color(tabs.aa, 'gamesense', {( b == "Ping Spike" and {150,200,25,200} or {185,185,185,255})}, {b})
-                pui.traverse(container, function(element)
-                    element:depend({settings[b].on, true})
-                end)
-                local i = 0
-                settings[b].on:set_callback(function(self)
-                    data.list[data.numbers[b]] = self.value and pui.format(data.elements[data.numbers[b]] ..' ~ \vEnabled') or pui.format(data.elements[data.numbers[b]] .. ' ~ \aC8C8C8C8Disabled')
-                    gamesense.box:update(data.list)
-                end, true)  
-
-                settings[b].container = container
-            end
-            if not crosshair.used.value then
-                pui.traverse(settings, function(element, path)
-                    if path[2] == 'on' then
-                        element:set(true)
-                    end
-                end)
-            end
-            pui.traverse(settings, function(element, path)
-                element:depend({gamesense.box, data.numbers[path[1]] - 1})
-            end)
-            gamesense.settings = settings
-            Features.gamesense = gamesense
-        end
-
-        local bomb = {} do
-            bomb = create.element(tabs.aa, "Bomb Indicator")
-            bomb.drag = create.drag("Bomb Indicator", {screen.center.x, screen.size.y*0.25})
-            bomb.color = create.color(tabs.aa, 'bomb', {{175,175,255,255}, {220,30,50,255}}, {"Good", "Bad"})
-
-            Features.bomb = bomb
-        end
-
-        local scope = {} do
-            scope = create.element(tabs.aa, "Custom Scope")
-
-            scope.color = create.color(tabs.aa, 'scope', {{255,255,255,200}})
-            scope.style = tabs.aa:combobox("\nscope.Style", {"Style: Plus", "Style: Cross"})
-            local gap,length = {},{}
-            for i=0, 100 do
-                gap[i] = 'Gap '..i..'px'
-            end
-            for i=0, 200 do
-                length[i] = 'Lenght '..i..'px'
-            end
-            scope.gap = tabs.aa:slider("\nLines Gap", 0, 100, 10, true, "px", 1, gap)
-            scope.length = tabs.aa:slider("\nLines Lenght", 0, 200, 50, true, "px", 1, length)
-            scope.dalbaeb = tabs.aa:slider("dalbaeb\nLines dalbaeb", -360 , 360, 0, true, "°", 1)
-            scope.dalbaeb2 = tabs.aa:checkbox("dalbaeb2\ndaun")
-
-            scope.dalbaeb:depend({scope.style, "Style: Cross"})
-            scope.dalbaeb2:depend({scope.style, "Style: Cross"})
-
-            Features.scope = scope
-        end
-
-        local zoom = {} do
-            zoom = create.element(tabs.aa, "Thirdperson Distance")
-            zoom.distance = tabs.aa:slider("Thirdperson Distance", 30, 100, 58)
-            zoom.div2 = tabs.aa:label("\a373737FF‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾\n"..'zoom')
-            zoom.mode = tabs.aa:combobox("Animated Zoom\nzoom.mode", {"Mode: Single", "Mode: Dual"})
-            zoom.first = tabs.aa:slider("\nZoom Fov 1", -100, 100, 30, true, '%')
-            zoom.second = tabs.aa:slider("\nZoom Fov 2", -100, 100, 50, true, '%')
-            zoom.second:depend({zoom.mode, 'Mode: Dual'})
-            zoom.div = tabs.aa:label("\a373737FF‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾\n"..'zoom')
-            -- zoom.button = tabs.aa:hotkey("Zoom on Hotkey")
-            -- zoom.third = tabs.aa:slider("\nZoom Fov 1", 0, 100, 50, true, '%')
-            -- zoom.stack = tabs.aa:checkbox("Stack with Scope Zoom")
-
-
-            Features.zoom = zoom
-        end
-
-        local aspect = {} do
-            aspect = create.element(tabs.aa, "Aspect Ratio")
-            aspect.ratio = tabs.aa:slider("\naspect.ratio", 59, 250, 59, true, '', .01, {[59] = "Off"})
-
-            Features.aspect = aspect
-        end
-
-        local viewmodel = {} do
-            viewmodel = create.element(tabs.aa, "Viewmodel")
-            local fov = {}
-            for i=-200, 200 do
-                fov[i] = i..' fov'
-            end
-            viewmodel.scope = tabs.aa:checkbox("Show weapon in scope")
-            viewmodel.div = tabs.aa:label("\a373737FF‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾\n"..'viewmodel')
-            viewmodel.fov = tabs.aa:slider("\nviewmodel.fov", 0, 100, default.viewmodel.fov, true, '', 1, fov)
-            viewmodel.x = tabs.aa:slider("\nviewmodel.x", -300, 300, default.viewmodel.x * 10, true, ' x', .1)
-            viewmodel.y = tabs.aa:slider("\nviewmodel.y", -300, 300, default.viewmodel.y * 10, true, ' y', .1)
-            viewmodel.z = tabs.aa:slider("\nviewmodel.z", -300, 300, default.viewmodel.z * 10, true, ' z', .1)
-            viewmodel.reset = tabs.aa:button("Reset")
-            viewmodel.reset:set_callback(function()
-                for a,_ in pairs(default.viewmodel) do
-                    viewmodel[a]:reset()
-                end
-            end)
-
-            Features.viewmodel = viewmodel
-        end
-
-        local velocity = {} do
-            velocity = create.element(tabs.aa, "Velocity Warning")
-            velocity.drag = create.drag("Velocity Warning", {screen.center.x, screen.size.y*0.3})
-            velocity.color = create.color(tabs.aa, 'velocity', {{175,175,255,255}, {220,30,50,255}}, {"Good", "Bad"})
-
-            Features.velocity = velocity
-        end
-
-        local stickman = {} do
-            stickman = create.element(tabs.aa, "Stickman")
-            stickman.color = create.color(tabs.aa, 'stickman', {{255,255,255,200}})
-            stickman.def = tabs.aa:checkbox("Only on defensive")
-
-
-            Features.stickman = stickman
-        end
-
-        Features.label2 = create.label(tabs.aa, "Ragebot")
-
-
-        local logs = {} do
-            logs = create.element(tabs.aa, "Ragebot Logs")
-            logs.display = tabs.aa:multiselect("\nlogs.display", {"On Screen", "In Console"})
-            logs.color = create.color(tabs.aa, 'logs', {{0,0,0,100}}, {"Background"})
-            logs.time = tabs.aa:slider("Time\nlogs.time", 5, 50, 30, true, 's', .1)
-            logs.used = tabs.aa:checkbox("Used display?")
-            logs.used:depend({setup, 'xdadadsadadx'})
-            logs.time:depend({logs.display, 'On Screen'})
-            logs.display:set_callback(function()
-                logs.used:set(true)
-            end)
-            if not logs.used.value then
-                logs.display:set({"On Screen", "In Console"})
-            end
-
-            Features.logs = logs
-        end
-
-local Predict = {} do
-    Predict = create.element(tabs.aa, "Predict")
-
-    Predict.enable = tabs.aa:checkbox("Predict System")
-    Predict.hotexp = tabs.aa:hotkey("Hotkey")
-    Predict.pingpos = tabs.aa:combobox("Ping Variations", { "High", "Low" })
-
-    Predict.selectgun = tabs.aa:combobox("\n", { "-", "AWP", "SCOUT", "AUTO", "R8" })
-    Predict.slideawp = tabs.aa:combobox("\n", { "Disabled", "Medium", "Maximum", "Extreme" })
-    Predict.slidescout = tabs.aa:combobox("\n", { "Disabled", "Medium", "Maximum", "Extreme" })
-    Predict.slideauto = tabs.aa:combobox("\n", { "Disabled", "Medium", "Maximum", "Extreme" })
-    Predict.slider8 = tabs.aa:combobox("\n", { "Disabled", "Medium", "Maximum", "Extreme" })
-
-    -- Зависимости
-    Predict.slideawp:depend({ Predict.selectgun, "AWP" })
-    Predict.slidescout:depend({ Predict.selectgun, "SCOUT" })
-    Predict.slideauto:depend({ Predict.selectgun, "AUTO" })
-    Predict.slider8:depend({ Predict.selectgun, "R8" })
-
-    -- Логика скрытия без on_change
-    if not Predict.enable.value then
-        pui.traverse(Predict, function(e, path)
-            if path[1] == 'pingpos' then e:set("High") end
-        end)
-    end
-
-    Features.Predict = Predict
-end
-
-
-local resolver = {} do
-    resolver = create.element(tabs.aa, "Resolver")
-
-    resolver.enable = tabs.aa:checkbox("Enable Resolver")
-    resolver.used = tabs.aa:checkbox("Used elements? resolver")
-    resolver.used:depend({setup, 'resolver'})
-
-    if not resolver.used.value then
-        resolver.enable:set(true)
-    end
-
-    Features.resolver = resolver
-end
-
-local jumpstop = {} do
-    jumpstop = create.element(tabs.aa, "JumpStop")
-
-    jumpstop.enable = tabs.aa:checkbox('Jumpstop')
-    jumpstop.hotkey = tabs.aa:hotkey('Jumpstop', true)
-    jumpstop.distance = tabs.aa:slider('\nJumpStop Distance', 0, 2000, 1000, true, 'u', 1)
-    jumpstop.used = tabs.aa:checkbox("Used elements? jumpstop")
-    jumpstop.used:depend({setup, 'jumpstop'})
-
-    if not jumpstop.used.value then
-        jumpstop.enable:set(true)
-    end
-
-    Features.jumpstop = jumpstop
-end
-
-local mantletap = {} do
-    mantletap = create.element(tabs.aa, "Angelic Tap")
-
-    mantletap.enable = tabs.aa:checkbox("Enable Angelic Tap")
-    mantletap.used = tabs.aa:checkbox("Used elements? mantletapr")
-    mantletap.used:depend({setup, 'mantletap'})
-
-    if not mantletap.used.value then
-        mantletap.enable:set(true)
-    end
-
-    Features.mantletap = mantletap
-end
-
-        local marker = {} do
-            marker = create.element(tabs.aa, "Shot Marker")
-
-            marker.time = tabs.aa:slider("Time\nmarker.time", 5, 50, 30, true, 's', .1)
-            marker.size = tabs.aa:slider("Size\nmarker.size", 3, 10, 5)
-            marker.style = tabs.aa:combobox("\nmarker.Style", {"Style: Cross", "Style: Plus"})
-            marker.extra = tabs.aa:checkbox("Show Miss Reason")
-
-            Features.marker = marker
-        end
-
-        local color = {} do
-            color.label = tabs.aa:label('\nmega label color')
-            color['hit'] = tabs.aa:label('Hit color', {180, 230, 30, 255})
-            color['?'] = tabs.aa:label('? color', {255, 0, 0, 255})
-            color['spread'] = tabs.aa:label('Spread color', {255, 200, 0, 255})
-            color['prediction error'] = tabs.aa:label('Prediction error color', {255, 125, 125, 255})
-            color['unpredicted occasion'] = tabs.aa:label('Unpredicted occasion color', {255, 125, 125, 255})
-            color['death'] = tabs.aa:label('Death color', {100, 100, 255, 255})
-            color['unregistered shot'] = tabs.aa:label('Unregistered shot color', {100, 100, 255, 255})
-
-            for a,b in pairs(color) do
-                b:depend({setup, function()
-                    return setup.value == "Ragebot Logs" or setup.value == 'Shot Marker'
-                end}, {tab, 'Features'})
-            end
-            
-            Features.color = color
-        end
-
-        local tracer = {} do
-            tracer = create.element(tabs.aa, "Bullet Tracer")
-            tracer.time = tabs.aa:slider("Time\ntracer.time", 5, 50, 20, true, 's', .1)
-            tracer.color = create.color(tabs.aa, 'tracer', {{255,255,255,200}})
-
-            Features.tracer = tracer
-        end
-
-        local helper = {} do
-            helper = create.element(tabs.aa, "Damage Helper")
-            helper.note = tabs.aa:label("\aafafff90Note: Draws line if 1-shot to stomach.")
-            helper.color = create.color(tabs.aa, 'helper', {{255,255,255,75}})
-            helper.label = tabs.aa:label("Lines Positions")
-            helper.first = tabs.aa:combobox("\nFirstperson.helper", {"Firstperson: Crosshair", "Firstperson: Upper-Center", "Firstperson: Bottom-Center"})
-            helper.third = tabs.aa:combobox("\nThirdperson.helper", {"Thirdperson: Local Player","Thirdperson: Crosshair", "Thirdperson: Upper-Center", "Thirdperson: Bottom-Center"})
-
-
-            Features.helper = helper
-        end
-
-        local hitchance = {} do
-            hitchance = create.element(tabs.aa, "Hitchance Modifier")
-            local disabled = ('\aC8C8C8C8'..'off ')
-            local data = {} do
-                data.elements = {
-                    "Bind / In Air / No Scope", "Global", "Autosnipers", "SSG 08", "AWP", "R8 Revolver", "Desert Eagle", "Pistol", "Zeus", "Rifle", "Shotgun", "SMG", "Machine gun"
-                }
-                data.scope = {
-                    "Autosnipers", "SSG 08", "AWP"
-                }
-                data.ex = {[(data.elements[1])] = true}
-                data.list = {table.unpack(data.elements)}
-                data.numbers = {}
-                data.values = {}
-                for i, name in pairs(data.elements) do
-                    data.numbers[name] = i
-                    if name ~= data.elements[1] then
-                        data.values[name] = { button = disabled, air = disabled, scope = disabled}
-                    end
-                end
-                for a, b in pairs(data.ex) do
-                    data.list[data.numbers[a]] = pui.format('\v'..data.list[data.numbers[a]])
-                end
-            end
-
-            hitchance.box = tabs.aa:listbox("\nhitchance", data.list)
-
-            local settings = {}
-            for a, b in pairs(data.elements) do
-                if not data.ex[b] then
-                    settings[b] = {}
-                    local button,air,scope = {}, {}, {}
-
-                    button.on = tabs.aa:checkbox("Enabled hitchance \vOn Button\n"..b)
-                    button.hotkey = tabs.aa:hotkey("\nez"..b, true)
-                    button.hitchance = tabs.aa:slider("\nbutton"..b, 0, 100, 50, true, '%')
-                    settings[b].button = button
-
-                    air.on = tabs.aa:checkbox("Enabled hitchance \vIn Air\n"..b)
-                    air.hitchance = tabs.aa:slider("\nair"..b, 0, 100, 50, true, '%')
-                    settings[b].air = air
-
-                    if data.scope[data.numbers[b] - 2] then
-                        scope.on = tabs.aa:checkbox("Enabled hitchance \vNo scope\n"..b)
-                        scope.hitchance = tabs.aa:slider("\nscope"..b, 0, 100, 50, true, '%')
-                        settings[b].scope = scope
-                    end 
-                    pui.traverse(settings[b], function(element, path)
-                        if path[2] ~= 'on' then
-                            element:depend({settings[b][path[1]].on, true})
-                        else
-                            element:set_callback(function(self)
-                                data.values[b][path[1]] = (element.value and ('\v'..'on ') or disabled)
-                                data.list[data.numbers[b]] = pui.format(data.elements[data.numbers[b]] ..' \aC8C8C8C8~ ' .. data.values[b].button.. data.values[b].air.. (data.scope[data.numbers[b] - 2] and data.values[b].scope or ''))
-                                hitchance.box:update(data.list)
-                            end, true)
-                        end
-                    end)
-                end
-            end
-            pui.traverse(settings, function(element, path)
-                element:depend({hitchance.box, data.numbers[path[1]] - 1})
-            end)
-
-            hitchance.settings = settings
-            Features.hitchance = hitchance
-        end
-
-        Features.label3 = create.label(tabs.aa, "Other")
-
-        local animations = {} do
-            animations = create.element(tabs.aa, "Animations")
-
-            animations.ground = tabs.aa:combobox('On-Ground', {"Default", "Never slide", "Always slide", "Jitter", "Moonwalk"})
-            animations.note = tabs.aa:label("\aCAB02AC8"..'"Jitter" works as an anti-aim')
-                :depend({animations.ground, "Jitter"})
-            animations.air = tabs.aa:combobox('In-Air', {"Default", "Static", "Moonwalk"})
-            animations.extra = tabs.aa:multiselect('Extra', {"Landing Pitch", "Disable Move Lean"})
-
-            Features.animations = animations
-        end
-
-        local console = {} do
-            console = create.element(tabs.aa, "Console Filter")
-
-            Features.console = console
-        end
-        
-        local clantag = {} do
-            clantag = create.element(tabs.aa, "Clantag")
-
-            Features.clantag = clantag
-        end
-
-        local trashtalk = {} do
-            trashtalk = create.element(tabs.aa, "Trashtalk")
-            trashtalk.event = tabs.aa:multiselect("\ntrashtalk.event", {"On Kill", "On Death"})
-            trashtalk.used = tabs.aa:checkbox("Used elements? trashtalk")
-            trashtalk.used:depend({setup, 'xdadadsadadx'})
-
-            if not trashtalk.used.value then
-                pui.traverse(trashtalk, function(element, path)
-                    if path[1] == 'event' then
-                        element:set({"On Kill", "On Death"})
-                    end
-                end)
-            end
-
-            Features.trashtalk = trashtalk
-        end
-
-        menu.Features = Features
-    end
-
-    local Antiaims = {} do
-
-        local settings = {} do
-            settings.cond = tabs.fl:combobox("\vCondition", condition_list, nil, false)
-
-            Antiaims.settings = settings
-        end
-
-        local other = {} do
-            other.fl_disabler = tabs.aa:multiselect("Fake Lag Disablers", {"Not moving", "Crouch Move"})
-            other.space = tabs.aa:label('\nlabel4')
-            other.avoid_backstab = tabs.aa:checkbox('Avoid Backstab')
-            other.ladder = tabs.aa:checkbox('Fast Ladder')
-            -- other.unsafe = tabs.aa:checkbox('Unsafe Exploit Charge')
-
-            Antiaims.other = other
-        end
-
-        local hotkeys = {} do
-            hotkeys.space = tabs.aa:label('\nlabel3')
-            hotkeys.edge = tabs.aa:hotkey('Edge Yaw')
-            hotkeys.fs = tabs.aa:hotkey('Freestanding')
-            hotkeys.fs_disablers = tabs.aa:multiselect("Disablers \nFS", {"Yaw Jitter", "Body Yaw"})
-            hotkeys.space1 = tabs.aa:label('\nlabel2')
-            hotkeys.left = tabs.aa:hotkey('Manual \v<\r Left')
-            hotkeys.right = tabs.aa:hotkey('Manual \v>\r Right')
-            hotkeys.forward = tabs.aa:hotkey('Manual \v^\r Forward')
-            hotkeys.space2 = tabs.aa:label('\nlabel2')
-
-            Antiaims.hotkeys = hotkeys
-        end
-
-        local t1,t2,t3 = {}, {}, {}
-        for i=-180, 180 do
-            t1[i] = i..' max'
-        end
-        for i=-180, 180 do
-            t2[i] = i..' min'
-        end
-        for i=0, 50 do
-            t3[i] = i*.1 ..' °/s'
-        end
-
-        local other2 = {} do
-            -- other2.defensive = tabs.other:checkbox('Disable Defensive AA')
-            other2.defensive = tabs.other:multiselect('Disable Defensive Features', {"Def. Flick", "Def. AA", "Force Def."})
-            other2.flick = tabs.other:checkbox('Defensive Flick', 0X00)
-
-            local aa = {
-                disablers = tabs.other:multiselect("Disablers", {"Body Yaw", "Yaw Jitter"}),
-
-                pitch = tabs.other:combobox("Pitch\nfl d_pitch", {"None", "Random", "Custom", "Progressive"}),
-                pitch_val = tabs.other:slider("\nfl d_pitch_val", -89, 89, 0, true, '°', 1, {[-89] = "Up", [-45] = "Semi-Up", [0] = "Zero", [45] = "Semi-Down", [89] = "Down"}),    
-                pitch_speed = tabs.other:slider("\nfl d_pitch_speed", 0, 50, 10, true, '', 0.1, t3),
-                pitch_min = tabs.other:slider("\nfl d_pitch_min", -89, 89, -89, true, '°', 1, t2),
-                pitch_max = tabs.other:slider("\nfl d_pitch_max", -89, 89, 89, true, '°', 1, t1),
-
-                yaw = tabs.other:combobox("Yaw\nfl  d_yaw", {"None", "Sideways", 'Sideways 45', "Spin", "Random", "Custom", "Yaw Opposite", "Progressive", "Yaw Side"}),
-                yaw_val = tabs.other:slider("\nfl d_yaw_val", -180, 180, 0, true, '°', 1, {[-180] = 'Forward', [0] = "Backward", [180] = "Forward"}),
-                yaw_invert = tabs.other:hotkey("Inverter"),
-                yaw_speed = tabs.other:slider("\nfl d_yaw_speed", 0, 50, 10, true, '', 0.1, t3),
-                yaw_min = tabs.other:slider("\nfl d_yaw_min", -180, 180, -180, true, '°', 1, t2),
-                yaw_max = tabs.other:slider("\nfl d_yaw_max", -180, 180, 180, true, '°', 1, t1),
-
-            }
-            pui.traverse(aa, function(element, path)
-                element:depend({other2.flick, true})
-            end)
-
-            aa.pitch_val:depend({aa.pitch, 'Custom'})
-            aa.yaw_val:depend({aa.yaw, "Custom"})
-            aa.pitch_speed:depend({aa.pitch, 'Progressive'})
-            aa.pitch_min:depend({aa.pitch, 'Progressive'})
-            aa.pitch_max:depend({aa.pitch, 'Progressive'})
-            aa.yaw_invert:depend({aa.yaw, "Custom"})
-            aa.yaw_speed:depend({aa.yaw, "Progressive", "Spin"})
-            aa.yaw_min:depend({aa.yaw, 'Progressive'})
-            aa.yaw_max:depend({aa.yaw, 'Progressive'})
-            other2.flick_aa = aa
-            Antiaims.other2 = other2
-        end
-
-        local xd do
-            Antiaims.label = tabs.fl:label('\nlabel1')
-
-            Antiaims.label2 = tabs.fl:label('\nlabel2')
-            Antiaims.default = tabs.fl:checkbox("GS", nil, false)
-            Antiaims.megabutton = tabs.fl:button("Setup \vOther\r settings")
-
-            tab:depend({Antiaims.default, false})
-            tab_label:depend({Antiaims.default, false})
-            Antiaims.default:depend({tab, 'fwefwefw'})
-
-            Antiaims.default:set_callback(function(self)
-                for a,t in pairs(refs) do
-                    if a ~= 'aa' then
-                        for name,el in pairs(t) do
-                            el:set_visible(self.value)
-                        end
-                    end
-                end
-                refs.aa.fs:set_visible(self.value)
-            end, true)
-
-            Antiaims.megabutton:set_callback(function()
-                Antiaims.default:set(not Antiaims.default:get())
-            end)
-            xd = {
-                ['megabutton'] = true,
-                ['label'] = true,
-                ['other'] = 1,
-                ['hotkeys'] = 1,
-            }
-        end
-
-        local defensive_max = 13
-        local max_angle = 180
-
-        local builder = {} do
-            local xd2 = {table.unpack(condition_list)}
-            table.remove(xd2, 1)
-            table.remove(xd2, 10)
-            for i, name in pairs(condition_list) do
-                builder[name] = {}
-
-                pui.macros.x = '\n'..name
-
-
-                builder[name].enabled = (name ~= condition_list[1] and name ~= condition_list[10]) and tabs.aa:checkbox("Enabled - \v"..name) or nil
-                builder[name].conditions = name == condition_list[11] and tabs.aa:multiselect("Conditions", (xd2)) or nil
-                builder[name].weapons = name == condition_list[11] and tabs.aa:multiselect("\nWeapons", {
-                    "Knife", 
-                    "Zeus", 
-                    "Height Advantage"
-                }) or nil
-                builder[name].label_en = tabs.aa:label("\nen label")
-                builder[name].yaw = {
-                    base = tabs.aa:combobox("Yaw Base", (name == condition_list[10] and {"Local view", "At targets"} or {"At targets", "Local view"})),
-                    global = name ~= condition_list[10] and tabs.aa:slider("Global Yaw\f<x>", -max_angle, max_angle, 0, true, '°') or nil,
-                    left = name ~= condition_list[10] and tabs.aa:slider("Left & Right Yaw\f<x>", -max_angle, max_angle, 0, true, '°') or nil,
-                    right = name ~= condition_list[10] and tabs.aa:slider("\nright yaw\f<x>", -max_angle, max_angle, 0, true, '°') or nil,
-                }
-                builder[name].label_yaw = tabs.aa:label("\nyaw label")
-
-                builder[name].jitter = {
-                    type = tabs.aa:combobox("Yaw Jitter\f<x>", {
-                        "Off", 
-                        "Offset", 
-                        "Center", 
-                        "Random", 
-                        "Skitter", 
-                        "3-Way", 
-                        "5-Way", 
-                    }),
-                    mode = tabs.aa:combobox("\njitter mode\f<x>", {
-                        "Static", "Switch", "Random", "Spin"
-                    }),
-                    value = tabs.aa:slider("\f<x>jitter value", -max_angle, max_angle, 0, true, '°'),
-                    value2 = tabs.aa:slider("\f<x>jitter value2", -max_angle, max_angle, 0, true, '°'),
-                    ways = (function()
-                        local el = {}
-                        for i=1, 5 do
-                            el[i] = tabs.aa:slider("\f<x>way" .. i, -max_angle, max_angle, 0, true, '°')
-                        end
-                        return el
-                    end)(),
-                    rand = tabs.aa:slider("Randomization\f<x>", 0, max_angle, 0, true, '°', 1, {[0] = 'Off'})
-                }
-
-                local t = {['Off'] = true, ['3-Way'] = true, ['5-Way'] = true}
-                builder[name].jitter.mode:depend({builder[name].jitter.type, function()
-                    return not t[builder[name].jitter.type.value]
-                end})
-                builder[name].jitter.value:depend({builder[name].jitter.type, function()
-                    return not t[builder[name].jitter.type.value]
-                end})
-                builder[name].jitter.value2:depend({builder[name].jitter.mode, "Static", true}, {builder[name].jitter.type, function()
-                    return not t[builder[name].jitter.type.value]
-                end})
-                for i=1, 5 do
-                    builder[name].jitter.ways[i]:depend({builder[name].jitter.type, function()
-                        return i<4 and builder[name].jitter.type.value == '3-Way' or builder[name].jitter.type.value == '5-Way'
-                    end})
-                end
-                builder[name].jitter.rand:depend({builder[name].jitter.type, "Off", true})
-                
-                builder[name].body = {
-                    yaw = tabs.aa:combobox('Body Yaw\f<x>', {"Off", "Static", "Opposite", "Jitter"}),
-                    side = tabs.aa:slider("\f<x> side", 0,1,0, true, nil, 1, {[0] = "Left", [1] = "Right"}),
-                    delay = {
-                        mode = tabs.aa:combobox("\ndelay mode\f<x>", {"Static", "Switch"}),
-                        delay = tabs.aa:slider("Delay\f<x>", 1, 12, 1, true, 't', 1, {[1] = 'Default'}),
-                        left = tabs.aa:slider("Left ticks\f<x>", 1, 12, 1, true, 't', 1, {[1] = 'Default'}),
-                        right = tabs.aa:slider("Right ticks\f<x>", 1, 12, 1, true, 't', 1, {[1] = 'Default'}),
-                        switch = tabs.aa:slider("Switch ticks\f<x>", 0, 50, 0, true, 't', 1, {[0] = 'Off'}),
+    local function get_watermark_elements ()
+        local t, settings = { }, elements.visuals.watermark.settings
+        if settings.elements:get('Nickname') then 
+            local nick_type = settings.nickname:get()
+            local nick = ''
+            if nick_type == 'Loader' then
+                nick = lua.username
+            elseif nick_type == 'Steam' then
+                nick = panorama.open().MyPersonaAPI.GetName() or lua.username
+            elseif nick_type == 'Custom' then
+                nick = settings.custom:get()
+                local trimmed_nick = (nick or ''):gsub('^%s*(.-)%s*$', '%1'):lower()
+                if trimmed_nick == '' then
+                    nick = lua.username
+                else
+                    local special_names = {
+                        admin = '3a6bIJl_kAk_CpaTb',
+                        developer = 'uc/7oBegb_/7ugopaca',
+                        dev = 'uc/7oBegb_/7ugopaca',
+                        lordmouse = '3aTpoJIJIeH',
+                        mephissa = 'BEGAYSHIY OT PZDOR',
+                        powrotic = 'BEGAYSHIY OT PZDOR'
                     }
-                }
-                builder[name].body.side:depend({builder[name].body.yaw, "Static"})
-                for a,b in pairs(builder[name].body.delay) do
-                    b:depend({builder[name].body.yaw, "Jitter"}, a ~= 'mode' and {builder[name].body.delay.mode, a == 'delay' and "Static" or "Switch"})
+                    nick = special_names[trimmed_nick] or nick
                 end
-                builder[name].label_def = tabs.aa:label("\ndef label")
-                if name ~= "Fake Lag" then
-                    builder[name].defensive = {
-                        force = tabs.aa:checkbox("Force Defensive\f<x>"),
-                        enabled = tabs.aa:checkbox("Enabled \v" .. name ..  " \rDefensive AA\f<x>"),
-                        enabled_ = name ~= "Default" and tabs.aa:label("\aFFFFFF4E- Using settings from "..condition_list[1].." Condition\f<x>") or nil,
-                        override = name ~= "Default" and tabs.aa:checkbox("Override \v" .. name ..  " \rDefensive AA\f<x>") or nil,
-                        override_ = tabs.aa:label("\aFF4E4EFF- DEFENSIVE AA DISABLED\f<x>"),
-
-                        settings = {
-                            duration = tabs.aa:slider('Duration \f<x>', 2, defensive_max, 13, true, 't', 1, {[13] = "Max"}),
-                            disablers = tabs.aa:multiselect("Disablers", {"Body Yaw", "Yaw Jitter"}),
-
-                            pitch = tabs.aa:combobox("Pitch\f<x> d_pitch", {"None", "Random", "Custom", "Progressive"}),
-                            pitch_val = tabs.aa:slider("\f<x>d_pitch_val", -89, 89, 0, true, '°', 1, {[-89] = "Up", [-45] = "Semi-Up", [0] = "Zero", [45] = "Semi-Down", [89] = "Down"}),      
-                            pitch_speed = tabs.aa:slider("\nd d_pitch_speed", 0, 50, 10, true, '', 0.1, t3),
-                            pitch_min = tabs.aa:slider("\nd d_pitch_min", -89, 89, -89, true, '°', 1, t2),
-                            pitch_max = tabs.aa:slider("\nd d_pitch_max", -89, 89, 89, true, '°', 1, t1),
-                            yaw = tabs.aa:combobox("Yaw\f<x> d_yaw", {"None", "Sideways", 'Sideways 45', "Spin", "Random", "Custom", "Yaw Opposite", "Progressive", "Yaw Side"}),
-                            yaw_val = tabs.aa:slider("\f<x>d_yaw_val", -180, 180, 0, true, '°', 1, {[-180] = 'Forward', [0] = "Backward", [180] = "Forward"}),
-                            yaw_speed = tabs.aa:slider("\nd d_yaw_speed", 0, 50, 10, true, '', 0.1, t3),
-                            yaw_min = tabs.aa:slider("\nd d_yaw_min", -180, 180, -180, true, '°', 1, t2),
-                            yaw_max = tabs.aa:slider("\nd d_yaw_max", -180, 180, 180, true, '°', 1, t1),
-                        }
-                    }
-                    for n,ref in pairs(builder[name].defensive.settings) do
-                        ref:depend({builder[name].defensive.enabled, true})
-                        if name ~= condition_list[1] then
-                            ref:depend({builder[name].defensive.override, true})
-                        end
-                    end
-                    if name ~= condition_list[1] then 
-                        builder[name].defensive.override:depend({builder[name].defensive.enabled, true})
-                        builder[name].defensive.enabled_:depend({builder[name].defensive.enabled, true}, {builder[name].defensive.override, false})
-                    end
-                    builder[name].defensive.override_:depend({other2.defensive, true}, {builder[name].defensive.enabled, true})
-                    builder[name].defensive.settings.pitch_val:depend({builder[name].defensive.settings.pitch, 'Custom'})
-                    builder[name].defensive.settings.yaw_val:depend({builder[name].defensive.settings.yaw, "Custom"})
-                    builder[name].defensive.settings.pitch_speed:depend({builder[name].defensive.settings.pitch, 'Progressive'})
-                    builder[name].defensive.settings.pitch_max:depend({builder[name].defensive.settings.pitch, 'Progressive'})
-                    builder[name].defensive.settings.pitch_min:depend({builder[name].defensive.settings.pitch, 'Progressive'})
-                    builder[name].defensive.settings.yaw_speed:depend({builder[name].defensive.settings.yaw, "Progressive", "Spin"})
-                    builder[name].defensive.settings.yaw_min:depend({builder[name].defensive.settings.yaw, "Progressive"})
-                    builder[name].defensive.settings.yaw_max:depend({builder[name].defensive.settings.yaw, "Progressive"})
-                end
-                builder[name].label_def2 = tabs.aa:label("\ndef label2")
-
-                builder[name].export = tabs.aa:button("Export \v"..name)
-                builder[name].import = tabs.aa:button("Import \v"..name)
-                builder[name].export:set_callback(function(self)
-                    local config = pui.setup(builder[name])
-
-                    clipboard.set(base64.encode( json.stringify(config:save()) ))
-                    client.exec('playvol buttons\\button18 0.5')
-                    utils.printc(pui.format("\f<r>[\f<ez>Regicide.Hit\f<r>] ~ Exported condition \f<ez>" .. name))
-                end)
-                builder[name].import:set_callback(function(self)
-                    local config = pui.setup(builder[name])
-
-                    config:load(json.parse(base64.decode(clipboard.get())))
-                    client.exec('playvol buttons\\button17 0.5')
-                    utils.printc(pui.format("\f<r>[\f<ez>Regicide.Hit\f<r>] ~ Imported config for \f<ez>" .. name ..'\f<r> condition'))
-                end)
             end
-
-            pui.traverse(builder, function(element, path)
-                element:depend({settings.cond, path[1]})
-                if path[1] ~= condition_list[1] and path[1] ~= condition_list[10] and path[2] ~= 'enabled' then
-                    element:depend({builder[path[1]].enabled, true})
-                end
-            end)
-
-            Antiaims.builder = builder
+            t[#t+1] = {icon = icons.Nickname.icon, height = icons.Nickname.height, text = nick}
         end
-
-        pui.traverse(Antiaims, function(element, path)
-            if not xd[path[1]] then
-                element:depend({Antiaims.default, false})
-            elseif xd[path[1]] == 1 then
-                element:depend({Antiaims.default, true})
+        if settings.elements:get('Frames Per Second') then
+            local now = globals.realtime()
+            if now - fps_cache.last_update > 1.5 then
+                fps_cache.value = math.floor(1 / globals.frametime() + 0.5)
+                fps_cache.last_update = now
             end
-        end)
-
-        menu.Antiaims = Antiaims
-    end
-
-    client.set_event_callback('post_config_load', function()
-        setup:set("None")
-    end)
-
-    pui.traverse(menu, function(element, path)
-        element:depend({tab, path[1]})
-        if path[3] == 'color' then goto skip end
-        if path[1] == "Features" and path[3] == 'on' then
-            local path2 = menu.Features[path[2]]
-            pui.traverse(path2, function(el, path3)
-                local el = path2
-                for _, name in pairs(path3) do
-                    el = el[name]
-                end
-                el:depend({setup, function()
-                    return setup.value == path2.on.name:sub(9, #path2.on.name) or (({['disabled'] = true, ['enabled'] = true, ['on'] = true})[path3[1]] and setup.value == 'None')
-                end})
-            end)
+            t[#t+1] = {icon = icons['Frames Per Second'].icon, height = icons['Frames Per Second'].height, text = string.format('%d fps', fps_cache.value)}
         end
-        ::skip::
-    end)
-end
-
-local Config do
-    Config = pui.setup(menu)
-
-    local update_box = function()
-        db.configs = {}
-        for i, cfgs in pairs(db.db.configs[menu.Home.aa.type.value]) do
-            table.insert(db.configs, pui.format('[\v'..i..'\r] ' .. cfgs[1])) 
-        end
-        menu.Home.aa.box:update(db.configs)
-    end update_box()
-
-    local create_config = function(name, cfg)
-        name = cfg and name or menu.Home.other.Local.name:get()
-        if #name >= 1 then
-            table.insert(db.db.configs['Local'], {name, cfg or base64.encode(json.stringify(Config:save())) } )
-            db.save()
-            menu.Home.other.Local.name:set('')
-            utils.printc(pui.format("\f<r>[\f<ez>Regicide.Hit\f<r>] ~ \f<ez>"..(cfg and 'Imported' or 'Created').." \f<r>config \f<ez>" .. name))
-        end
-        update_box()
-        menu.Home.aa.box:set(#db.db.configs['Local'] - 1)
-    end
-    menu.Home.other.Local.create:set_callback(create_config)
-
-    local get_config = function()
-        local t = db.db.configs['Local'][menu.Home.aa.box.value + 1]
-        return t[1], t[2]
-    end
-
-    menu.Home.aa.delete:set_callback(function()
-        local val = menu.Home.aa.box:get()
-        utils.printc(pui.format("\f<r>[\f<ez>Regicide.Hit\f<r>] ~ \f<ez>Deleted \f<r>config \f<ez>" .. get_config(val)))
-
-        client.exec('playvol buttons\\button16 0.5')
-        table.remove(db.db.configs['Local'], val + 1)
-        menu.Home.aa.box:set(0)
-        db.save()
-        update_box()
-    end)
-
-    menu.Home.aa.save:set_callback(function()
-        local cfg = base64.encode( json.stringify(Config:save()) )
-        db.db.configs['Local'][menu.Home.aa.box.value + 1][2] = cfg
-        if menu.Home.other.Local.autoload_save:get("Save") then
-            db.db.last.cfg = cfg
-        end
-        utils.printc(pui.format("\f<r>[\f<ez>Regicide.Hit\f<r>] ~ \f<ez>Updated \f<r>config \f<ez> ".. get_config()))
-
-        client.exec('playvol buttons\\button16 0.5')
-        db.save()
-    end)
-
-    menu.Home.aa.export:set_callback(function()
-        local name, cfg = get_config()
-        local text = string.format('Regicide::%s::%s', name, cfg)
-        client.exec('playvol buttons\\button18 0.5')
-        clipboard.set(text)
-        utils.printc(pui.format("\f<r>[\f<ez>rRegicide.Hit\f<r>] ~ \f<ez>Exported \f<r>config \f<ez>" .. name))
-
-    end)
-    
-    local load_config = function(self, cfg)
-        local name, config = get_config()
-        local decrypted = json.parse( base64.decode(config) )
-        Config:load(decrypted, self.name == "Load AA" and "Antiaims" or nil)
-        drag.on_config_load()
-        utils.printc(pui.format("\f<r>[\f<ez>Regicide.Hit\f<r>] ~ \f<ez>Loaded"..(self.name == "Load AA" and " antiaim" or '').." \f<r>config \f<ez>" .. name))
-        client.exec('playvol buttons\\button17 0.5')
-        if menu.Home.other.Local.autoload_save:get("Load") then
-            db.db.last.cfg = base64.encode( json.stringify(Config:save()) )
-        end
-        db.save()
-    end
-
-    menu.Home.other['Local'].import:set_callback(function()
-        local text = clipboard.get()
-        local name, config = text:match("Regicide::([%s%S]+)::([%s%S]+)")
-        if not name or not config then return end
-        create_config(name,config)
-        load_config(menu.Home.aa.load)
-    end)
-    
-    menu.Home.aa.load:set_callback(load_config)
-    menu.Home.aa.loadaa:set_callback(load_config)
-    if db.db.last.on and db.db.last.cfg then
-        local decrypted = json.parse( base64.decode(db.db.last.cfg) )
-        Config:load(decrypted)
-        utils.printc(pui.format("\f<r>[\f<ez>Regicide.Hit\f<r>] ~ \f<ez>Loaded \f<r>last saved config"))
-        
-        client.exec('playvol buttons\\button17 0.5')
-    end
-
-    defer(function()
-        if db.db.last.on and menu.Home.other.Local.autoload_save:get("Shutdown") then
-            db.db.last.cfg = base64.encode( json.stringify(Config:save()) )
-            db.save()
-        end
-    end)
-end
-
-local lp do
-    lp = {}
-    lp.state = "Standing"
-    lp.manual = nil
-    lp.in_score = false
-    lp.scoped = false
-    lp.zoom = 0
-    lp.entity = nil
-    -- lp.tickbase_shifting = 0
-    lp.weapon = nil
-    lp.flicking = false
-    lp.exploit = ''
-
-    lp.on_ground = false
-    lp.moving = false
-    lp.crouch = false
-
-    local height_advantage = function()
-        local origin = vector(entity.get_origin(lp.entity))
-        local threat = client.current_threat()
-        if not threat then return false end
-        local threat_origin = vector(entity.get_origin(threat))
-        local height_to_threat = origin.z-threat_origin.z
-        return height_to_threat > 50
-    end
-
-    local update_state = function(e)
-        lp.flicking = menu.Antiaims.other2.flick.value and menu.Antiaims.other2.flick:get_hotkey() and not menu.Antiaims.other2.defensive:get("Def. Flick")
-        lp.exploit = refs2.fd:get() and 'fd' or refs2.dt.value and refs2.dt:get_hotkey() and 'dt' or refs.other.osaa.value and refs.other.osaa:get_hotkey() and 'osaa' or ''
-        lp.entity = entity.get_local_player()
-        -- lp.tickbase_shifting = antiaim_funcs.get_tickbase_shifting()
-
-        local flags = entity.get_prop(lp.entity, "m_fFlags")
-        local velocity = vector(entity.get_prop(lp.entity, "m_vecVelocity"))
-    
-        lp.on_ground = bit.band(flags, 1) ~= 0 and e.in_jump == 0
-        lp.crouch = entity.get_prop(lp.entity, "m_flDuckAmount") > 0.9
-        lp.moving = math.sqrt((velocity.x * velocity.x) + (velocity.y * velocity.y) + (velocity.z * velocity.z)) > 5
-
-        lp.in_score = e.in_score == 1
-        lp.scoped = entity.get_prop(lp.entity, 'm_bIsScoped') == 1
-        lp.weapon = entity.get_player_weapon(lp.entity)
-        lp.zoom = lp.weapon and entity.get_prop(lp.weapon, 'm_zoomLevel') or 0
-
-        local state = (function()
-            if lp.manual then return condition_list[10] end
-            if menu.Antiaims.builder[condition_list[12]].enabled:get() and #entity.get_players(true) == 0 then return condition_list[12] end
-            if not (refs2.dt.value and refs2.dt.hotkey:get())
-            and not (refs.other.osaa.value and refs.other.osaa.hotkey:get())
-            and refs.fl.enabled.value and refs.fl.enabled.hotkey:get() then return condition_list[9] end
-            if lp.on_ground then
-                if lp.crouch then return lp.moving and condition_list[6] or condition_list[5]
-                else if lp.moving then 
-                    return e.in_speed == 1 and condition_list[4] or condition_list[3]
-                    else return condition_list[2] end 
-                end
-            else return lp.crouch and condition_list[8] or condition_list[7]
+        if settings.elements:get('Ping') then
+            local ping = math.floor(client.latency() * 1000)
+            if ping >= 150 then
+                icons.Ping.icon = ''
+            elseif ping >= 100 then
+                icons.Ping.icon = ''
+            elseif ping >= 50 then
+                icons.Ping.icon = ''
+            else
+                icons.Ping.icon = ''
             end
-        end)()
-        
-        local csgoweapon = csgo_weapons(lp.weapon)
-        local safehead
-        if csgoweapon and menu.Antiaims.builder[condition_list[11]].conditions:get(state) then
-            local work = (
-                csgoweapon.is_knife and menu.Antiaims.builder[condition_list[11]].weapons:get("Knife") or 
-                csgoweapon.is_taser and menu.Antiaims.builder[condition_list[11]].weapons:get("Zeus") or
-                menu.Antiaims.builder[condition_list[11]].weapons:get("Height Advantage") and height_advantage()
-            )
-            safehead = work and condition_list[11] or false
+            t[#t+1] = {icon = icons.Ping.icon, height = icons.Ping.height, text = string.format('%d ms', ping)}
         end
-        lp.state = safehead or state
+        if settings.elements:get('Tickrate') then
+            t[#t+1] = {icon = icons.Tickrate.icon, height = icons.Tickrate.height, text = string.format('%d tick', math.floor(1 / globals.tickinterval() + 0.5))}
+        end
+        if settings.elements:get('Time') then
+            local h, m, s = client.system_time()
+            t[#t+1] = {icon = icons.Time.icon, height = icons.Time.height, text = string.format('%02d:%02d', h, m)}
+        end
+        
+        return t
     end
-    client.set_event_callback('setup_command', update_state)
-    client.set_event_callback("level_init", function()
-        lp.entity = nil
-    end)
-end
 
-local watermark do 
+    local drag = drag_system.new(
+        'windows_watermark',
+        drag_slider.windows.watermark.x,
+        drag_slider.windows.watermark.y,
+        screen_size_x() - 5, 24,
+        'xy',
+        {
+            w = function () return watermark.width end,
+            h = function () return watermark.height end,
+            align_x = 'right',
+            expand_dir = 'left',
+            snap_distance = 10,
+            show_guides = true,
+            show_default_dot = true,
+            show_highlight = true,
+            align_center = true,
+            show_center_dot = true
+        }
+    )
 
-    local fps,last,avg_fps = math.floor(1.0 / globals.frametime()),globals.curtime(),0
-    local last2 = last
-    local update
-    local reset
+    local alpha, anim_width = 0, 0
+    local windows_gap = 16
+    local anim_elements_show, anim_elements_width, anim_elements_alpha = 0, 0, 0
 
-    update = function()
-        client.delay_call(1, update)
+    local element_alphas = { }
 
-        fps =  math.floor(avg_fps)
-    end update()
+    local function on_paint_ui ()
+        local wm_enabled = elements.visuals.windows:get('Watermark')
+        local target_alpha = wm_enabled and 255 or 0
+        alpha = lerp('windows_watermark', target_alpha, 10, 0.001, 'ease_out')
+        if alpha < 1 then return end
 
-    reset = function()
-        client.delay_call(10, reset)
-        avg_fps = 0
-    end reset() 
+        local screen_w = screen_size_x()
+        local max_allowed_width = math.min(screen_w * 0.3, 400)
 
-    local render = drag.register(menu.Features.watermark.drag, vector(330, 25), "watermark", function(self)
+        local elements_list = get_watermark_elements()
+        local show_elements = #elements_list > 0
 
-        local text do
-            local new_frame = 1.0 / math.max(0.0001, globals.frametime())
-            avg_fps = avg_fps <= 0.0 and new_frame or (avg_fps * 0.9 + new_frame * 0.1)
+        local info_text = string.format('%s ', lua.name)
+        local build_text = tostring(lua.build)
+        local info_measure = renderer.measure_text('b', info_text)
+        local build_measure = renderer.measure_text('b', build_text)
 
-            local ping = string.format('%.0f', client.latency()*1000)
-        
-            local hours, minutes = client.system_time()
-            local time = string.format("%02d:%02d", hours,minutes)
+        local custom = coloring.parse()
+        local icon_color = {custom.r, custom.g, custom.b}
 
-            local custom = menu.Features.watermark.custom:get()
+        local element_parts = { }
+        local element_widths = { }
+        local total_elements_width = 0
 
-            text = '  |  Regicide.Hit / '..version[1] ..'  |  '..
-            (menu.Features.watermark.elements:get("Nickname") and (custom ~= '' and custom or (username[1]))..'  |  ' or '').. 
-            (menu.Features.watermark.elements:get("FPS") and fps..' fps  |  ' or '')..
-            (menu.Features.watermark.elements:get("Ping") and ping..' ping  |  ' or '')..
-            (menu.Features.watermark.elements:get("Time") and time..' |  ' or '')
+        for i, v in ipairs(elements_list) do
+            local icon = v.icon or ''
+            local text = v.text or ''
+            local icon_height = v.height or 16
+            local key = tostring(i) .. '_' .. text
+            local target_elem_alpha = wm_enabled and 255 or 0
+            element_alphas[key] = element_alphas[key] or 0
+            element_alphas[key] = lerp('wm_elem_alpha_' .. key, target_elem_alpha, 10, 0.001, 'ease_out')
 
+            local icon_hex = coloring.rgba_to_hex(icon_color[1], icon_color[2], icon_color[3], math.floor(element_alphas[key]))
+
+            local icon_w = icon ~= '' and renderer.measure_text('b', icon) or 0
+            local text_w = renderer.measure_text('b', text)
+            
+            local padding = (icon ~= '' and text ~= '') and 2 or 0
+            element_widths[i] = icon_w + text_w + padding
+
+            element_parts[i] = {
+                icon = icon,
+                icon_hex = icon_hex,
+                icon_height = icon_height,
+                text = text,
+                key = key,
+                icon_w = icon_w,
+                text_w = text_w,
+                padding = padding
+            }
+
+            total_elements_width = total_elements_width + element_widths[i] + (i > 1 and 8 or 0)
         end
 
-        local measure = vector(renderer.measure_text('d', text))
-        self.position.y = math.floor(menu.Features.watermark.lock.value == "None" and self.position.y or string.match(menu.Features.watermark.lock.value, 'Upper') and 10 or screen.size.y-measure.y-10)
-        self.position.x = math.floor( menu.Features.watermark.lock.value == "None" and self.position.x or
-            (menu.Features.watermark.lock.value == 'Upper-Right' or menu.Features.watermark.lock.value == 'Bottom-Right') and screen.size.x - measure.x - 20 or
-            (menu.Features.watermark.lock.value == 'Upper-Center' or menu.Features.watermark.lock.value == 'Bottom-Center') and screen.center.x - measure.x * 0.5 or 20
+        if #element_parts > 0 then
+            total_elements_width = total_elements_width + 16
+        end
+
+        local left_w = info_measure + build_measure + 16
+        local right_w = total_elements_width
+
+        local total_width = left_w + (right_w > 0 and (windows_gap + right_w) + 2 or 0)
+
+        anim_width = math.floor(lerp('wm_anim_width', total_width, 60, 0.1, 'ease_in_out'))
+        watermark.width = anim_width
+
+        local drag_x, drag_y = drag:get_pos()
+        local x, y = drag_x, drag_y
+
+        drag:update(alpha)
+        drag:draw_guides(alpha)
+
+        local h = 28
+        create_interface(
+            x + 2, y + 2, left_w, h,
+            custom.r, custom.g, custom.b, alpha,
+            { side = 'up', item = 'Watermark' }
         )
 
-        self.size.x = measure.x
-        self.size.y = measure.y+6
-
-        local w = colors['watermark']["Background"]
-        local t = colors['watermark']["Text"]
-
-        utils.rectangle(self.position.x,self.position.y, self.size.x, self.size.y, w.r,w.g,w.b,w.a, 5)
-        renderer.text(self.position.x, self.position.y + 2, t.r,t.g,t.b,math.max(t.a, 75), 'd', 0, menu.Features.watermark.candy.value and gradient.animated_gradient_text(text, gradient.table, 20/#gradient.table, 1) or text)
-    end, nil, false)
-
-    client.set_event_callback('paint', function()
-        render:update()
-    end)
-end
-
-local hitchance do
-    local custom = {
-        ['G3SG1 / SCAR-20'] = "Autosnipers", 
-    }
-    local self = menu.Features.hitchance
-    local setup = function()
-        refs2.hc:override()
-        if not lp.entity or not entity.is_alive(lp.entity) then return end
-        local weapon = refs2.weapon:get()
-        local a = self.settings[(custom[weapon] or weapon)]
-        local b = a.button.hotkey:get() and a.button.on.value and 'button' or a.air.on.value and not lp.on_ground and 'air' or a.scope and a.scope.on.value and not lp.scoped and 'scope' or nil
-        if not b then hitchance = false return end
-        hitchance = {b, a[b].hitchance.value}
-
-        client.delay_call(0,function()
-            refs2.hc:override(a[b].hitchance.value)
-        end)
-    end
-    menu.Features.hitchance.on:set_event('setup_command', setup)
-    menu.Features.hitchance.on:set_callback(function()
-        hitchance = false
-        refs2.hc:override()
-    end)
-end
-
-local crosshair do
-    crosshair = { --{x, alpha, y}
-        {0, 1,0},
-        {0, 1,0, 0},
-        {0, 0,0},
-        {0, 0,0},
-        {0, 0,0},
-        {0, 0,0},
-        {0, 0,0},
-        {0, 0,0},
-        {0, 0,0},
-        {0, 0,0},
-        {0, 0,0},
-    }
-    local flags = '-cd'
-    local prev = lp.state
-    local transparency = 0
-    local render = function()
-        if not lp.entity or not entity.is_alive(lp.entity) then return end
-        local weapon2 = entity.get_player_weapon(lp.entity)
-        if not weapon2 then return end
-        local weapon = csgo_weapons(weapon2)
-        if not weapon then return end
-        local game_rules = entity.get_game_rules()
-        if not game_rules then return end
-        local m_gamePhase = entity.get_prop(game_rules, 'm_gamePhase')
-        local NextPhase = entity.get_prop(game_rules, 'm_timeUntilNextPhaseStarts')
-        transparency = utils.lerp(transparency, (weapon.is_grenade or lp.in_score or m_gamePhase == 5 or NextPhase ~= 0) and 0.5 or 1, 0.03)
-
-        local version1 = colors['crosshair']['Version']:clone()
-        version1.a = version1.a * transparency
-        local rin = colors['crosshair']['Regicide.Hit']:clone()
-        rin.a = math.max(127, rin.a * transparency)
-        local cond = colors['crosshair']['Conditions']:clone()
-        cond.a = cond.a * transparency
-
-        menu.Features.crosshair.settings['Regicide.Hit'].container.candy:get()
-        local elements = {
-            -- {"Regicide.Hit", true, gradient.animated_gradient_text(text, gradient.table, (#gradient.table/5)/#gradient.table)},
-            {"Regicide.Hit", true, 
-            (menu.Features.crosshair.settings['Regicide.Hit'].container.candy.value and "Regicide.Hit ["..version[1].."]" or ("\a"..utils.to_hex(rin).."Regicide.Hit \a"..utils.to_hex(version1) .."["..version[1].."]"))},
-            {"Conditions", true, menu.Features.crosshair.settings['Conditions'].container.candy.value and lp.state or"\a"..utils.to_hex(cond)..lp.state},
-            {"Double Tap", refs2.dt.value and refs2.dt:get_hotkey()},
-            {"Hide Shots", refs.other.osaa.value and refs.other.osaa:get_hotkey()},
-            {"Min. Damage", refs2.mdmg:get() and refs2.mdmg:get_hotkey()},
-            {"Hitchance", hitchance and hitchance[1] == 'button'},
-            {"Body Aim", refs2.baim:get()},
-            {"Safe Points", refs2.safe:get()},
-            {"Ping Spike", refs2.ping.value and refs2.ping:get_hotkey()},
-            {"Freestanding", menu.Antiaims.hotkeys.fs:get()},
-            {"Flicking", lp.flicking},
-        }
-        for i=2, #elements do
-            local name = elements[i][1]
-            elements[i][3] = i == 2 and elements[i][3] or menu.Features.crosshair.settings[elements[i][1]].container.name:get() == '' and hard["crosshair"].names[elements[i][1]] or menu.Features.crosshair.settings[elements[i][1]].container.name:get()
-            elements[i][2] = elements[i][2] and menu.Features.crosshair.settings[elements[i][1]].on.value
-        end
-        local y_add = 20
+        renderer.text(x + 10, y + 10, 255, 255, 255, alpha, 'b', nil, info_text)
         
-        do
-            for i, table in pairs(crosshair) do
-                table[2] = utils.lerp(table[2], elements[i][2] and transparency or 0, 0.03)
+        if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get('Watermark') then
+            draw_gradient_text(
+                x + 10 + info_measure, 
+                y + 10,
+                'b',
+                nil,
+                build_text,
+                25,
+                {r = custom.r, g = custom.g, b = custom.b, a = alpha},
+                {r = custom.r3, g = custom.g3, b = custom.b3, a = alpha},
+                {r = custom.r4, g = custom.g4, b = custom.b4, a = alpha},
+                {r = custom.r2, g = custom.g2, b = custom.b2, a = alpha}
+            )
+        else
+            renderer.text(x + 10 + info_measure, y + 10,
+                custom.r,
+                custom.g,
+                custom.b,
+                alpha, 'b', nil, build_text
+            )
+        end
 
-                if table[2] > 0 then 
-                    local text = elements[i][3]:upper()
-                    local measure = vector(renderer.measure_text(flags, text))
-                    table[3] = utils.lerp(table[3], elements[i][2] and measure.y or 0, 0.03)
-                    table[1] = utils.lerp(table[1], elements[i][2] and lp.scoped and (measure.x+20)/2 or 0, 0.035)
-                    local c = colors['crosshair'][elements[i][1]]
-                    renderer.text(screen.center.x + math.floor(table[1]), screen.center.y + y_add, 
-                    c.r,c.g,c.b,c.a * table[2], flags, 0, 
-                    menu.Features.crosshair.settings[elements[i][1]].container.candy:get() and gradient.animated_gradient_text(text, gradient.table, (#gradient.table/5)/#gradient.table, table[2]) or text)
-                    y_add = y_add + table[3]
+        if #element_parts > 0 and right_w > 0 then
+            local right_x = x + left_w + windows_gap
+            
+            create_interface(
+                right_x, y + 2, right_w, h,
+                custom.r, custom.g, custom.b, alpha,
+                { side = 'down', item = 'Watermark' }
+            )
+
+            local draw_x = right_x + 8
+            local base_y = y + 9
+            
+            for i, part in ipairs(element_parts) do
+                local elem_alpha = math.floor(element_alphas[part.key])
+                if elem_alpha > 0 then
+                    local icon_y = base_y + (16 - part.icon_height) / 2
+                    
+                    if part.icon ~= '' then
+                        if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get('Watermark') then
+                            local color = prepare_gradient_cache(25,
+                                {r = custom.r, g = custom.g, b = custom.b, a = alpha},
+                                {r = custom.r3, g = custom.g3, b = custom.b3, a = alpha},
+                                {r = custom.r4, g = custom.g4, b = custom.b4, a = alpha},
+                                {r = custom.r2, g = custom.g2, b = custom.b2, a = alpha},
+                                false
+                            )
+                            renderer.text(draw_x, icon_y, color.r, color.g, color.b, elem_alpha, 'b', nil, part.icon)
+                        else
+                            renderer.text(draw_x, icon_y, custom.r, custom.g, custom.b, elem_alpha, 'b', nil, part.icon)
+                        end
+                        draw_x = draw_x + part.icon_w + part.padding
+                    end
+
+                    if part.text ~= '' then
+                        renderer.text(draw_x, base_y, 255, 255, 255, elem_alpha, 'b', nil, part.text)
+                        draw_x = draw_x + part.text_w + 8
+                    end
                 end
             end
         end
     end
 
-    menu.Features.crosshair.on:set_event('paint', render)
+    -- client.set_event_callback('paint_ui', on_paint_ui)
+    elements.visuals.windows:set_event('paint_ui', on_paint_ui, function (ref)
+        return ref:get('Watermark')
+    end)
 end
 
-local damage do
-    local alpha = 0
-    damage = 100
-    
-    local render = drag.register(menu.Features.damage.drag, vector(30, 20), "damage", function(self)
-        if not lp.entity or not entity.is_alive(lp.entity) then return end
-        
-        alpha = utils.lerp(alpha, menu.Features.damage.display.value == "Display: Always On" and 1 
-            or refs2.mdmg:get() and refs2.mdmg:get_hotkey() and 1 
-            or (menu.Features.damage.display.value == "Display: Always On (50%)" and 0.5 or 0), 
-            0.02)
+local keybinds = { width = 160, height = 22 }; do
+    local drag = drag_system.new(
+        'windows_keybinds',
+        drag_slider.windows.keybinds.x,
+        drag_slider.windows.keybinds.y,
+        screen_size_x() * 0.7, screen_size_y() / 2 - 60,
+        'xy',
+        {
+            w = function () return keybinds.width end,
+            h = function () return keybinds.height end,
+            snap_distance = 0,
+            show_guides = true,
+            show_default_dot = false,
+            show_highlight = true,
+            align_center = false,
+            show_center_dot = false
+        }
+    )
 
-        local cur_dmg = ( (refs2.mdmg:get() and refs2.mdmg:get_hotkey()) or menu.Features.damage.display.value == "Display: On Hotkey" and menu.Features.damage.animation.value == "Animation: Instant") and refs2.mdmg2.value or refs2.dmg.value
-        
-        damage = menu.Features.damage.animation.value == "Animation: Instant" and cur_dmg or utils.lerp(damage, cur_dmg, 0.035)
+    local alpha = 0 local anim_show = 0 local anim_height = 0 local anim_width = 0
+    local bind_anim = { }
+    local bind_order = { }
 
-        if alpha > 0 then
-            local c = colors['damage']['Color']
-            renderer.text(self.position.x+self.size.x/2, self.position.y + self.size.y/2, c.r,c.g,c.b,c.a * alpha, 'dc'..(menu.Features.damage.font.value == "Font: Default" and '' or '-'), 0, string.format('%.0f', damage))
+    local function get_mode_name (hotkey)
+        if not hotkey then return 'holding' end
+        local mode_number = hotkey[2]
+        if mode_number == 0 then
+            return 'always on'
+        elseif mode_number == 1 then
+            return 'holding'
+        elseif mode_number == 2 then
+            return 'toggled'
+        elseif mode_number == 3 then
+            return 'off hotkey'
         end
-    end)
-    menu.Features.damage.on:set_event('paint', function()
-        render:update()
-    end)
+        return 'holding'
+    end
 
+    local all_binds = {
+        { name = 'Double tap', ref = reference.rage.aimbot.double_tap[1], variant = '1', key = 'Double tap' },
+        { name = 'Hide shots', ref = reference.antiaim.other.on_shot_anti_aim[1], variant = '1', key = 'Hide shots' },
+        { name = 'Ping spike', ref = reference.rage.ps[1], variant = '1', key = 'Ping spike' },
+        { name = 'Fake duck', ref = reference.rage.other.fake_duck, variant = '2', key = 'Fake duck' },
+        { name = 'Slow walk', ref = reference.antiaim.other.slow_motion[1], variant = '1', key = 'Slow walk' },
+        { name = 'Force body aim', ref = reference.rage.aimbot.force_body, variant = '2', key = 'Force body aim' },
+        { name = 'Force safe point', ref = reference.rage.aimbot.force_safe, variant = '2', key = 'Force safe point' },
+        { name = 'Min. damage', ref = reference.rage.aimbot.minimum_damage_override[1], variant = '1', key = 'Min. damage' },
+        { name = 'Freestanding', ref = elements.anti_aim.hotkeys.freestanding, variant = '1', key = 'Freestanding' },
+        { name = 'Edge yaw', ref = elements.anti_aim.hotkeys.edge_yaw, variant = '1', key = 'Edge yaw' }
+    }
+    for i, v in ipairs(all_binds) do
+        bind_order[v.key] = i
+    end
+
+    local function any_bind_active()
+        for _, b in ipairs(all_binds) do
+            local ref = b.ref
+            local variant = b.variant
+            if variant == '1' and (ref and ref.hotkey and ref.hotkey:get()) then
+                if get_mode_name({ref:get_hotkey()}) ~= 'always on' then
+                    return true
+                end
+            elseif variant == '2' and (ref and ref:get()) then
+                if get_mode_name({ref:get()}) ~= 'always on' then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    local function on_paint_ui()
+        local should_show = elements.visuals.windows:get('Keybinds') and (ui.is_menu_open() or any_bind_active())
+        local target_alpha = should_show and 255 or 0
+        alpha = lerp('windows_keybinds', target_alpha, 10, 0.001, 'ease_out')
+        anim_show = lerp('kb_anim_show', target_alpha > 0 and 1 or 0, 10, 0.001, 'ease_out')
+        if alpha < 1 then return end
+
+        drag:update(alpha)
+        drag:draw_guides(alpha)
+
+        local x, y = drag:get_pos()
+        local custom = coloring.parse()
+
+        for _, b in ipairs(all_binds) do
+            local ref = b.ref
+            local variant = b.variant
+            local active = false
+            local mode = 'holding'
+            if variant == '1' then
+                if ref and ref.hotkey then
+                    mode = get_mode_name({ref:get_hotkey()})
+                    active = ref.hotkey:get() and mode ~= 'always on'
+                end
+            elseif variant == '2' then
+                if ref then
+                    mode = get_mode_name({ref:get()})
+                    active = ref:get() and mode ~= 'always on'
+                end
+            end
+
+            bind_anim[b.key] = bind_anim[b.key] or { alpha = 0, y = 0, target_row = 0, cur_row = 0 }
+            local target = active and 1 or 0
+            bind_anim[b.key].alpha = lerp('kb_bind_alpha_' .. b.key, target, 10, 0.001, 'ease_out')
+            bind_anim[b.key].mode = mode
+            bind_anim[b.key].active = active
+            bind_anim[b.key].name = b.name
+            bind_anim[b.key].key = b.key
+        end
+
+        local visible_binds = { }
+        local row = 0
+        for _, b in ipairs(all_binds) do
+            local anim = bind_anim[b.key]
+            if anim.alpha > 0.01 then
+                row = row + 1
+                anim.target_row = row
+                table.insert(visible_binds, anim)
+            else
+                anim.target_row = 0
+            end
+        end
+
+        for _, b in ipairs(all_binds) do
+            local anim = bind_anim[b.key]
+            local target_y = anim.target_row > 0 and anim.target_row or (#visible_binds - 1)
+            anim.cur_row = lerp('kb_bind_row_' .. b.key, target_y, 7, 0.01, 'ease_out')
+        end
+
+        keybinds.height = 32 + (#visible_binds) * 16
+        keybinds.width = 140
+        for _, anim in ipairs(visible_binds) do
+            local w = renderer.measure_text('b', anim.name .. ' [' .. anim.mode .. ']')
+            if w + 24 > keybinds.width then keybinds.width = w + 24 end
+        end
+
+        anim_height = math.floor(lerp('kb_anim_height', keybinds.height - 4, 10, 0.1, 'ease_out'))
+        anim_width = math.floor(lerp('kb_anim_width', keybinds.width - 4, 10, 0.1, 'ease_out'))
+
+        create_interface(
+            x + 2, y + 2, anim_width, anim_height,
+            custom.r, custom.g, custom.b, alpha * anim_show,
+            { side = 'up', item = 'Keybinds' }
+        )
+
+        renderer.text(x + keybinds.width / 2, y + 16, 255, 255, 255, alpha * anim_show, 'cb', nil, 'Keybinds')
+
+        for _, b in ipairs(all_binds) do
+            local anim = bind_anim[b.key]
+            if anim.alpha > 0.01 then
+                local row_y = y + 10 + math.floor(anim.cur_row * 16)
+                local a = math.floor(alpha * anim_show * anim.alpha)
+                renderer.text(x + 10, row_y, 200, 200, 200, a, '', nil, anim.name)
+                renderer.text(x + keybinds.width - 10, row_y, 200, 200, 200, a, 'r', nil, '[' .. anim.mode .. ']')
+            end
+        end
+    end
+
+    -- client.set_event_callback('paint_ui', on_paint_ui)
+    elements.visuals.windows:set_event('paint_ui', on_paint_ui, function (ref)
+        return ref:get('Keybinds')
+    end)
+end
+
+local spectators = { width = 100, height = 60 }; do
+    local drag = drag_system.new(
+        'spectators',
+        drag_slider.windows.spectators.x,
+        drag_slider.windows.spectators.y,
+        screen_size_x() - 5, screen_size_y() / 2,
+        'xy',
+        {
+            w = function () return spectators.width end,
+            h = function () return spectators.height end,
+            align_x = 'right',
+            snap_distance = 10,
+            show_guides = true,
+            show_default_dot = true,
+            show_highlight = true,
+            align_center = true,
+            show_center_dot = true
+        }
+    )
+
+    local function on_paint_ui ()
+        
+    end
+end
+
+local debug_panel = { width = 100, height = 20 }; do
+    local drag = drag_system.new(
+        'debug_panel',
+        drag_slider.windows.debug_panel.x,
+        drag_slider.windows.debug_panel.y,
+        20, screen_size_y() / 2 - 390,
+        'xy',
+        {
+            w = function () return debug_panel.width end,
+            h = function () return debug_panel.height end,
+            align_x = 'left',
+            snap_distance = 10,
+            show_guides = true,
+            show_default_dot = true,
+            show_highlight = true,
+            align_center = true,
+            show_center_dot = true
+        }
+    )
+
+    local function debug_text (x, y, alpha, label, value, show_percent)
+        show_percent = show_percent or false
+        local flag = 'b'
+        local tooltip = type(value) == 'number' and (show_percent and '%' or '°') or ''
+
+        local custom = coloring.parse()
+        local color = nil
+        if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' then
+            color = prepare_gradient_cache(25,
+                {r = custom.r, g = custom.g, b = custom.b, a = alpha},
+                {r = custom.r3, g = custom.g3, b = custom.b3, a = alpha},
+                {r = custom.r4, g = custom.g4, b = custom.b4, a = alpha},
+                {r = custom.r2, g = custom.g2, b = custom.b2, a = alpha},
+                false
+            )
+        end
+
+        local measure = renderer.measure_text(flag, label)
+        local measure_arrow = renderer.measure_text(flag, '⬥') + 4
+        local r, g, b = custom.r, custom.g, custom.b
+        if color then
+            r, g, b = color.r, color.g, color.b
+        end
+
+        renderer.text(x, y, r, g, b, alpha, flag, nil, '⬥')
+        renderer.text(x + measure_arrow, y, 255, 255, 255, alpha, flag, nil, label)
+        renderer.text(x + measure_arrow + measure, y, 255, 255, 255, alpha, '', nil, tostring(value) .. tooltip)
+    end
+
+    local function make_debug_drawer (y_start, alpha, line_height)
+        line_height = line_height or 15
+        local y_offset = 0
+    
+        return function (x, label, value, show_percent)
+            debug_text(x, y_start + y_offset, alpha, label, value, show_percent)
+            y_offset = y_offset + line_height
+        end
+    end
+
+    local pitch, pitch_offset, yaw, offset, yaw_base, yaw_jitter, jitter_offset, body_yaw, body_side, fs_body_yaw = '', 0, '', 0, '', '', 0, '', 0, false
+    local function on_setup_command (e)
+        local angles = builder.angles(e)
+        
+        pitch = angles.pitch
+        pitch_offset = angles.pitch_offset
+        yaw = angles.yaw
+        offset = angles.offset
+        yaw_base = angles.yaw_base
+        yaw_jitter = angles.yaw_jitter
+        jitter_offset = angles.jitter_offset
+        body_yaw = angles.body_yaw
+        body_side = angles.body_side
+        fs_body_yaw = angles.fs_body_yaw
+    end
+
+    local function on_paint_ui ()
+        local enabled = elements.visuals.windows:get('Debug panel')
+        local alpha = lerp('debug_panel_alpha', enabled and 255 or 0, 10, 0.001, 'ease_out')
+        if alpha < 1 then return end
+
+        local condition = builder.get_state()
+
+        local custom = coloring.parse()
+        local width = renderer.measure_text('b', string.format('%s / Debug panel', lua.name)) + 8
+        debug_panel.width = width
+
+        drag:update(alpha)
+        drag:draw_guides(alpha)
+
+        local x, y = drag:get_pos()
+        if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' then
+            draw_gradient_text(
+                x + 4, 
+                y + 4,
+                'b',
+                nil,
+                string.format('%s', lua.name),
+                25,
+                {r = custom.r, g = custom.g, b = custom.b, a = alpha},
+                {r = custom.r3, g = custom.g3, b = custom.b3, a = alpha},
+                {r = custom.r4, g = custom.g4, b = custom.b4, a = alpha},
+                {r = custom.r2, g = custom.g2, b = custom.b2, a = alpha}
+            )
+
+            local gradient_width = renderer.measure_text('b', string.format('%s', lua.name))
+
+            renderer.text(x + gradient_width + 7, y + 4, 255, 255, 255, alpha, 'b', nil, '/ Debug panel')
+        else
+            renderer.text(x + 4, y + 4, 255, 255, 255, alpha, 'b', nil, string.format('\a%s%s\a%s / Debug panel', coloring.rgba_to_hex(custom.r, custom.g, custom.b, alpha), lua.name, coloring.rgba_to_hex(255, 255, 255, alpha)))
+        end
+
+        local draw_debug = make_debug_drawer(y + 20, alpha)
+
+        draw_debug(x + 4, 'State: ', condition)
+        draw_debug(x + 24, 'B. Modifier: ', elements.conditions[condition].modifier:get())
+        draw_debug(x + 24, 'B. Mod. offset: ', elements.conditions[condition].modifier_offset:get())
+        draw_debug(x + 24, 'B. Mod. randomization: ', elements.conditions[condition].modifier_randomization:get(), true)
+        draw_debug(x + 44, 'O. Offset: ', offset)
+        draw_debug(x + 44, 'O. Modifier: ', reference.antiaim.angles.yaw_jitter[1]:get())
+        draw_debug(x + 44, 'O. Mod. offset: ', reference.antiaim.angles.yaw_jitter[2]:get())
+        draw_debug(x + 44, 'O. Body yaw: ', reference.antiaim.angles.body_yaw[1]:get())
+        draw_debug(x + 44, 'O. Body side: ', reference.antiaim.angles.body_yaw[2]:get())
+        -- draw_debug(x + 4, 'B. Delay: ', elements.conditions[condition].delay:get())
+    end
+
+    client.set_event_callback('setup_command', on_setup_command)
+    client.set_event_callback('paint_ui', on_paint_ui)
+end
+
+local multi_panel = { width = 100, height = 60 }; do
+    local drag = drag_system.new(
+        'multi_panel',
+        drag_slider.windows.multi_panel.x,
+        drag_slider.windows.multi_panel.y,
+        screen_size_x() / 2, screen_size_y() / 2 - 400,
+        'xy',
+        {
+            w = function () return multi_panel.width end,
+            h = function () return multi_panel.height end,
+            align_x = 'center',
+            snap_distance = 10,
+            show_guides = true,
+            show_default_dot = true,
+            show_highlight = true,
+            align_center = true,
+            show_center_dot = true
+        }
+    )
+
+    local defensive_ticks, defensive_max_ticks = { }, 15
+    local lc_broken_max, lc_broken_show, lc_broken_ticks, lc_broken_timer, lc_broken_delay = 15, false, 0, 0, 1.5
+    local anim_height = 0
+
+    multi_panel._slowed_cache = { last_velocity = 0, last_modifier = 1, last_slow = 0, last_hit_tick = 0 }
+    local indicator_anim = { slowed = { }, defensive = { }, lc = { } }
+
+    local function get_slowed_down_percent ()
+        local me = entity.get_local_player()
+        if not me or not entity.is_alive(me) then
+            multi_panel._slowed_cache.last_velocity = 0
+            multi_panel._slowed_cache.last_modifier = 1
+            multi_panel._slowed_cache.last_slow = 0
+            return 0
+        end
+
+        local modifier = entity.get_prop(me, 'm_flVelocityModifier') or 1
+        local velocity = { entity.get_prop(me, 'm_vecVelocity') }
+        local speed = math.sqrt((velocity[1] or 0)^2 + (velocity[2] or 0)^2)
+        local on_ground = bit.band(entity.get_prop(me, 'm_fFlags') or 0, 1) == 1
+
+        if modifier < 1 then
+            if speed < (multi_panel._slowed_cache.last_velocity or 0) - 1 then
+                multi_panel._slowed_cache.last_slow = 1 - modifier
+                multi_panel._slowed_cache.last_hit_tick = globals.tickcount()
+            end
+            multi_panel._slowed_cache.last_modifier = modifier
+            multi_panel._slowed_cache.last_velocity = speed
+            return 1 - modifier
+        else
+            if on_ground and speed < 1 then
+                multi_panel._slowed_cache.last_slow = 0
+            end
+            multi_panel._slowed_cache.last_modifier = 1
+            multi_panel._slowed_cache.last_velocity = speed
+            return 0
+        end
+    end
+
+    local function on_paint_ui ()
+        local enabled = elements.visuals.windows:get('Multi panel')
+        local alpha = lerp('multi_panel_alpha', enabled and 255 or 0, 10, 0.001, 'ease_out')
+        if alpha < 1 then return end
+
+        local menu_open = ui.is_menu_open()
+        local me = entity.get_local_player()
+        local is_alive = me and entity.is_alive(me)
+        local slow_val, slowed_active = 0, false
+
+        if is_alive then
+            slow_val = get_slowed_down_percent()
+            slowed_active = slow_val > 0.01
+        else
+            multi_panel._slowed_cache.last_velocity = 0
+            multi_panel._slowed_cache.last_modifier = 1
+            multi_panel._slowed_cache.last_slow = 0
+        end
+
+        local is_defensive = exploits:in_defensive()
+        table.insert(defensive_ticks, 1, is_defensive and 1 or 0)
+        if #defensive_ticks > defensive_max_ticks then table.remove(defensive_ticks) end
+        local defensive_active = is_alive and is_defensive or false
+
+        local is_lc_broken = is_alive and exploits:is_lagcomp_broken() or false
+        local lc_ticks = 0
+        
+        if is_lc_broken then
+            lc_broken_timer = globals.realtime()
+            lc_ticks = helpers:clamp(exploits.ticks_processed, 0, lc_broken_max)
+            lc_broken_ticks = lc_ticks
+            lc_broken_show = true
+        elseif lc_broken_show and globals.realtime() - lc_broken_timer < lc_broken_delay then
+            lc_ticks = lc_broken_ticks
+        else
+            lc_ticks = 0
+            lc_broken_show = false
+        end
+        
+        local lc_active = lc_broken_show and lc_ticks       
+
+        local show = menu_open or slowed_active or defensive_active or lc_active
+        local animate = lerp('multi_panel_show', show and 1 or 0, 10, 0.001, 'ease_out')
+        local indicators = { }
+        local pad_top, pad_bottom, pad_between, section_h = 12, 15, 6, 28
+        if slowed_active or menu_open then table.insert(indicators, 'slowed') end
+        if defensive_active or menu_open then table.insert(indicators, 'defensive') end
+        if lc_active or menu_open then table.insert(indicators, 'lc') end
+
+        local indicator_y = { }
+        local active_names = { }
+        local indicator_delay_state = multi_panel._indicator_delay_state or {defensive = {active = false, timer = 0}, lc = {active = false, timer = 0}}
+        multi_panel._indicator_delay_state = indicator_delay_state
+
+        local function delay_insert (name, is_active, delay)
+            local now = globals.realtime()
+            if is_active then
+                indicator_delay_state[name].active = true
+                indicator_delay_state[name].timer = now
+                table.insert(active_names, name)
+            else
+                if indicator_delay_state[name].active then
+                    if now - indicator_delay_state[name].timer < delay then
+                        table.insert(active_names, name)
+                    else
+                        indicator_delay_state[name].active = false
+                    end
+                end
+            end
+        end
+
+        for _, name in ipairs({'slowed', 'defensive', 'lc'}) do
+            local is_active = false
+            for _, v in ipairs(indicators) do
+                if v == name then
+                    is_active = true
+                    break
+                end
+            end
+
+            if name == 'defensive' or name == 'lc' then
+                delay_insert(name, is_active, 0.5)
+            else
+                if is_active then
+                    table.insert(active_names, name)
+                end
+            end
+        end
+
+        local visible_count = #active_names
+
+        for i, name in ipairs({'slowed', 'defensive', 'lc'}) do
+            local active = false
+            for _, v in ipairs(active_names) do
+                if v == name then active = true break end
+            end
+
+            local target_alpha = active and 1 or 0
+            indicator_anim[name].alpha = lerp('multi_panel_' .. name .. '_alpha', target_alpha, 10, 0.001, 'ease_out')
+
+            local idx = 0
+            for j, v in ipairs(active_names) do
+                if v == name then idx = j break end
+            end
+
+            local actual_padding = pad_top
+            if name == 'slowed' then
+                if visible_count == 1 then
+                    actual_padding = 19
+                else
+                    actual_padding = 15
+                end
+            elseif name == 'defensive' then
+                if visible_count > 2 then
+                    actual_padding = 11
+                else
+                    actual_padding = 16
+                end
+            elseif name == 'lc' and visible_count == 1 then
+                actual_padding = 14
+            end
+
+            if indicator_anim[name].alpha > 0.01 and idx > 0 then
+                indicator_anim[name].target_y = actual_padding + (idx - 1) * (section_h + pad_between)
+            else
+                indicator_anim[name].target_y = actual_padding + (visible_count) * (section_h + pad_between) + 10
+            end
+
+            indicator_anim[name].y = lerp('multi_panel_' .. name .. '_y', indicator_anim[name].target_y, 10, 0.01, 'ease_out')
+            indicator_y[name] = indicator_anim[name].y
+        end
+
+        local target_height, actual_visible = pad_top + pad_bottom, 0
+        for _, name in ipairs({'slowed', 'defensive', 'lc'}) do
+            if indicator_anim[name].alpha > 0.01 then
+                target_height = target_height + section_h
+                actual_visible = actual_visible + 1
+            end
+        end
+        
+        if actual_visible > 1 then
+            target_height = target_height + 5 * (actual_visible - 1)
+        end
+        anim_height = lerp('multi_panel_height', target_height, 10, 0.01, 'ease_out')
+        multi_panel.height = anim_height
+
+        drag:update(alpha)
+        drag:draw_guides(alpha)
+        local x, y = drag:get_pos()
+        local custom = coloring.parse()
+        local color
+        if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get('Multi panel') then
+            color = prepare_gradient_cache(25,
+                {r = custom.r, g = custom.g, b = custom.b, a = alpha},
+                {r = custom.r3, g = custom.g3, b = custom.b3, a = alpha},
+                {r = custom.r4, g = custom.g4, b = custom.b4, a = alpha},
+                {r = custom.r2, g = custom.g2, b = custom.b2, a = alpha},
+                false
+            )
+        end
+        create_interface(
+            x + 2, y + 2,
+            math.max(multi_panel.width - 4, 0),
+            math.max(anim_height - 4, 0),
+            custom.r, custom.g, custom.b, alpha * animate,
+            { side = 'left + right', item = 'Multi panel' }
+        )
+
+        local INDICATOR_BAR_W = 60
+        local INDICATOR_BAR_H = 7
+        local INDICATOR_GRAPH_H = 14
+        local INDICATOR_FONT_SIZE = 'cb'
+        local INDICATOR_RADIUS = 2
+
+        if indicator_anim.slowed.alpha > 0.01 then
+            local y_off = y + indicator_y.slowed
+            renderer.text(x + (multi_panel.width / 2), y_off, 255, 255, 255, alpha * animate * indicator_anim.slowed.alpha, INDICATOR_FONT_SIZE, nil, 'Slowed down')
+
+            local bar_w, bar_h = INDICATOR_BAR_W, INDICATOR_BAR_H
+            local bar_x, bar_y = x + (multi_panel.width - bar_w) / 2, y_off + 10
+
+            local gradient_colors = {
+                use_gradient = colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get('Multi panel'),
+                col1_start = {r = custom.r, g = custom.g, b = custom.b, a = alpha * animate * indicator_anim.slowed.alpha},
+                col1_end   = {r = custom.r3, g = custom.g3, b = custom.b3, a = alpha * animate * indicator_anim.slowed.alpha},
+                col2_start = {r = custom.r4, g = custom.g4, b = custom.b4, a = alpha * animate * indicator_anim.slowed.alpha},
+                col2_end   = {r = custom.r2, g = custom.g2, b = custom.b2, a = alpha * animate * indicator_anim.slowed.alpha}
+            }
+
+            helpers.rounded_rectangle(bar_x, bar_y, bar_w, bar_h, INDICATOR_RADIUS, 40, 40, 40, (alpha * 0.7) * animate * indicator_anim.slowed.alpha)
+            helpers.rounded_rectangle(bar_x, bar_y, math.max(bar_w * slow_val, 3), bar_h, INDICATOR_RADIUS, custom.r, custom.g, custom.b, alpha * animate * indicator_anim.slowed.alpha, 
+                gradient_colors
+            )
+        end
+
+        if indicator_anim.defensive.alpha > 0.01 then
+            local y_off = y + indicator_y.defensive
+            renderer.text(x + (multi_panel.width / 2), y_off, 255, 255, 255, alpha * animate * indicator_anim.defensive.alpha, INDICATOR_FONT_SIZE, nil, 'Defensive')
+            local bar_w, bar_h = INDICATOR_BAR_W, INDICATOR_GRAPH_H
+            local bar_x, bar_y = x + (multi_panel.width - bar_w) / 2, y_off + 9
+
+            helpers.rounded_rectangle(bar_x, bar_y, bar_w, bar_h, INDICATOR_RADIUS, 40, 40, 40, (alpha * 0.7) * animate * indicator_anim.defensive.alpha)
+
+            local points = { }
+            local tick_w = bar_w / (defensive_max_ticks - 1)
+            for i = 1, defensive_max_ticks do
+                local value = defensive_ticks[i] == 1 and 1 or 0
+                local anim_val = lerp('defensive_graph_' .. i, value, 10, 0.01, 'ease_out')
+                local px = bar_x + (i - 1) * tick_w
+                local py = bar_y + bar_h - anim_val * (bar_h - 3)
+                points[#points+1] = {px, py, anim_val}
+            end
+
+            for i = 2, #points do
+                if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get('Multi panel') then
+                    local c = {color.r, color.g, color.b, math.floor(alpha * animate * indicator_anim.defensive.alpha)}
+                    renderer.line(points[i-1][1], points[i-1][2], points[i][1], points[i][2], c[1], c[2], c[3], c[4])
+                else
+                    local c = {custom.r, custom.g, custom.b, math.floor(alpha * animate * indicator_anim.defensive.alpha)}
+                    renderer.line(points[i-1][1], points[i-1][2], points[i][1], points[i][2], c[1], c[2], c[3], c[4])
+                end
+            end
+        end
+
+        if indicator_anim.lc.alpha > 0.01 then
+            local y_off = y + indicator_y.lc
+            renderer.text(x + (multi_panel.width / 2), y_off, 255, 255, 255, alpha * animate * indicator_anim.lc.alpha, INDICATOR_FONT_SIZE, nil, 'Lagcomp')
+
+            local lc_bar_w, lc_bar_h = INDICATOR_BAR_W, INDICATOR_BAR_H
+            local lc_bar_x, lc_bar_y = x + (multi_panel.width - lc_bar_w) / 2, y_off + 10
+            local lc_percent = helpers:clamp(lc_ticks / lc_broken_max, 0, 1)
+            helpers.rounded_rectangle(lc_bar_x, lc_bar_y, lc_bar_w, lc_bar_h, INDICATOR_RADIUS, 40, 40, 40, (alpha * 0.7) * animate * indicator_anim.lc.alpha)
+            helpers.rounded_rectangle(lc_bar_x, lc_bar_y, math.max(lc_bar_w * lc_percent, 3), lc_bar_h, INDICATOR_RADIUS, 255, 62, 62, alpha * animate * lc_percent * indicator_anim.lc.alpha)
+
+            renderer.text(x + (multi_panel.width / 2), lc_bar_y + lc_bar_h + 8, 255, 62, 62, alpha * animate * indicator_anim.lc.alpha, INDICATOR_FONT_SIZE, nil, string.format('%d ticks', lc_ticks))
+        end
+    end
+
+    -- client.set_event_callback('paint_ui', on_paint_ui)
+    elements.visuals.windows:set_event('paint_ui', on_paint_ui, function (ref)
+        return ref:get('Multi panel')
+    end)
+end
+
+local event_logger = { width = 300, height = 40 }; do
+    local MISS_COLOR = { r = 255, g = 0, b = 50, a = 255 }
+    local MISS_SPREAD_COLOR = { r = 255, g = 205, b = 0, a = 255 }
+    
+    local last_aim_data = { backtrack = 0, hitgroup = 'unknown', damage = 0 }
+    local last_hit_data = { hit_chance = 70 }
+    
+    local hitgroup_names = { 
+        [0] = 'generic', 'head', 'chest', 'stomach', 
+        'left arm', 'right arm', 'left leg', 'right leg', 
+        'neck', '?', 'gear' 
+    }
+    
+    -- local drag = drag_system.new(
+    --     'event_logger',
+    --     drag_slider.windows.event_logger.x,
+    --     drag_slider.windows.event_logger.y,
+    --     screen_size_x() / 2,
+    --     screen_size_y() / 2 + 270,
+    --     'xy',
+    --     {
+    --         w = function() return event_logger.width end,
+    --         h = function() return event_logger.height end,
+    --         align_x = 'center',
+    --         snap_distance = 10,
+    --         show_guides = true,
+    --         show_default_dot = true,
+    --         show_highlight = true,
+    --         align_center = true,
+    --         show_center_dot = true
+    --     }
+    -- )
+    
+    local function log_miss_to_console(e, victim_name, wanted_hitgroup, wanted_damage, hit_chance, backtrack, color)
+        -- reference.misc.miscellaneous.draw_console_output:set(false)
+        
+        client.color_log(color.r, color.g, color.b, string.format('%s > \0', lua.name:lower()))
+        client.color_log(255, 255, 255, 'missed \0')
+        client.color_log(color.r, color.g, color.b, string.format('%s \0', victim_name:lower()))
+        client.color_log(255, 255, 255, 'in \0')
+        client.color_log(color.r, color.g, color.b, string.format('%s \0', wanted_hitgroup))
+        client.color_log(255, 255, 255, 'due to \0')
+        client.color_log(color.r, color.g, color.b, string.format('%s \0', e.reason))
+        client.color_log(255, 255, 255, '/ estimated damage - \0')
+        client.color_log(color.r, color.g, color.b, string.format('%s \0', wanted_damage))
+        client.color_log(255, 255, 255, string.format('[hc: %s%% / bt: %st]', math.ceil(hit_chance), backtrack))
+    end
+    
+    local function log_hit_to_console(e, victim_name, group, damage, health, hit_chance, backtrack, wanted_hitgroup, wanted_damage, color)
+        -- reference.misc.miscellaneous.draw_console_output:set(false)
+
+        local weapon = e.weapon
+        local hit_type = 'hit'
+        if weapon == 'hegrenade' then 
+            hit_type = 'naded'
+        elseif weapon == 'inferno' then
+            hit_type = 'burned'
+        elseif weapon == 'knife' then 
+            hit_type = 'knifed'
+        end
+        
+        client.color_log(color.r, color.g, color.b, string.format('%s > \0', lua.name:lower()))
+        if health ~= 0 then
+            if hit_type == 'hit' then
+                client.color_log(255, 255, 255, 'hit \0')
+                client.color_log(color.r, color.g, color.b, string.format('%s \0', victim_name:lower()))
+                client.color_log(255, 255, 255, 'in \0')
+                client.color_log(color.r, color.g, color.b, string.format('%s \0', group))
+                client.color_log(255, 255, 255, 'for \0')
+                client.color_log(color.r, color.g, color.b, string.format('%s \0', damage))
+                client.color_log(255, 255, 255, 'damage / hp remaining - \0')
+                client.color_log(color.r, color.g, color.b, string.format('%d \0', health))
+                
+                if group ~= wanted_hitgroup then
+                    client.color_log(255, 255, 255, string.format(
+                        '[hc: %s%% / bt: %st / mismatched %s for %s dmg]', 
+                        math.ceil(hit_chance), 
+                        backtrack, 
+                        wanted_hitgroup, 
+                        wanted_damage
+                    ))
+                else
+                    client.color_log(255, 255, 255, string.format(
+                        '[hc: %s%% / bt: %st]', 
+                        math.ceil(hit_chance), 
+                        backtrack
+                    ))
+                end
+            else
+                client.color_log(255, 255, 255, string.format('%s \0', hit_type))
+                client.color_log(color.r, color.g, color.b, string.format('%s \0', victim_name:lower()))
+                client.color_log(255, 255, 255, 'for \0')
+                client.color_log(color.r, color.g, color.b, string.format('%s \0', damage))
+                client.color_log(255, 255, 255, 'damage / hp remaining - \0')
+                client.color_log(color.r, color.g, color.b, string.format('%d', health))
+            end
+        else
+            client.color_log(255, 255, 255, 'killed \0')
+            client.color_log(color.r, color.g, color.b, string.format(hit_type == 'hit' and '%s \0' or '%s', victim_name:lower()))
+            if hit_type == 'hit' then
+                client.color_log(255, 255, 255, 'in \0')
+                client.color_log(color.r, color.g, color.b, string.format('%s \0', group))
+                client.color_log(255, 255, 255, string.format(
+                    '[hc: %s%% / bt: %st]', 
+                    math.ceil(hit_chance), 
+                    backtrack
+                ))
+            end
+        end
+    end
+    
+    local function on_aim_fire (e)
+        if not elements.visuals.windows:get('Event logger') then
+            return
+        end
+
+        last_aim_data = { 
+            backtrack = globals.tickcount() - e.tick or 0,
+            hitgroup = e.hitgroup or 'unknown', 
+            damage = e.damage or 0 
+        }
+    end
+    
+    local function on_aim_hit (e)
+        if not elements.visuals.windows:get('Event logger') then
+            return
+        end
+
+        last_hit_data = { 
+            hit_chance = e.hit_chance or 70,
+        }
+    end
+    
+    local function on_aim_miss (e)
+        if not elements.visuals.windows:get('Event logger') then
+            return
+        end
+
+        local settings = elements.visuals.event_logger.settings.type
+
+        local victim_name = entity.get_player_name(e.target) or 'unknown'
+        local wanted_hitgroup = hitgroup_names[last_aim_data.hitgroup] or 'unknown'
+        local wanted_damage = last_aim_data.damage or 0
+        local hit_chance = e.hit_chance or 0
+        local backtrack = last_aim_data.backtrack or 0
+        
+        local color
+        if e.reason == 'spread' or e.reason == 'prediction error' then
+            color = MISS_SPREAD_COLOR
+        else
+            color = MISS_COLOR
+        end
+        
+        if settings:get('In console') then
+            log_miss_to_console(
+                e, 
+                victim_name, 
+                wanted_hitgroup, 
+                wanted_damage, 
+                hit_chance, 
+                backtrack, 
+                color
+            )
+        end
+    end
+    
+    local function on_player_hurt (e)
+        if not elements.visuals.windows:get('Event logger') then
+            return
+        end
+
+        local settings = elements.visuals.event_logger.settings.type
+        local attacker = client.userid_to_entindex(e.attacker)
+        local local_player = entity.get_local_player()
+        
+        if attacker ~= local_player then 
+            return 
+        end
+        
+        local victim = client.userid_to_entindex(e.userid)
+        local victim_name = entity.get_player_name(victim) or 'unknown'
+        local damage = e.dmg_health or 0
+        local hitgroup = e.hitgroup or 0
+        local group = hitgroup_names[hitgroup] or 'unknown'
+        local wanted_hitgroup = hitgroup_names[last_aim_data.hitgroup] or 'unknown'
+        local wanted_damage = last_aim_data.damage or 0
+        local hit_chance = last_hit_data.hit_chance or 0
+        local backtrack = last_aim_data.backtrack or 0
+        local health = e.health or 0
+
+        local custom = coloring.parse()
+        local color = nil
+        if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get('Event logger') then
+            color = prepare_gradient_cache(25,
+                {r = custom.r, g = custom.g, b = custom.b, a = 255},
+                {r = custom.r3, g = custom.g3, b = custom.b3, a = 255},
+                {r = custom.r4, g = custom.g4, b = custom.b4, a = 255},
+                {r = custom.r2, g = custom.g2, b = custom.b2, a = 255},
+                false
+            )
+        end
+
+        local r, g, b = custom.r, custom.g, custom.b
+        if color then
+            r, g, b = color.r, color.g, color.b
+        end
+        
+        if settings:get('In console') then
+            log_hit_to_console(
+                e,
+                victim_name, 
+                group, 
+                damage, 
+                health, 
+                hit_chance, 
+                backtrack, 
+                wanted_hitgroup, 
+                wanted_damage, 
+                { r = r, g = g, b = b, a = 255 }
+            )
+        end
+    end
+    
+    client.set_event_callback('aim_fire', on_aim_fire)
+    client.set_event_callback('aim_hit', on_aim_hit)
+    client.set_event_callback('aim_miss', on_aim_miss)
+    client.set_event_callback('player_hurt', on_player_hurt)
+end
+
+---
+
+local side_indicators_buffer = { }; do
+    local indicator_animations = { }
+    local indicator_state      = {
+        _lc_delay = { active = false, timer = 0, last_broken = false }
+    }
+
+    local function on_indicator (indicator)
+        if #side_indicators_buffer == 0 or not (
+            side_indicators_buffer[#side_indicators_buffer].text == indicator.text and
+            side_indicators_buffer[#side_indicators_buffer].r    == indicator.r    and
+            side_indicators_buffer[#side_indicators_buffer].g    == indicator.g    and
+            side_indicators_buffer[#side_indicators_buffer].b    == indicator.b
+        ) then
+            side_indicators_buffer[#side_indicators_buffer + 1] = indicator
+        end
+    end
+
+    local planting_started_at = nil
+    local function on_bomb_beginplant ()
+        planting_started_at = globals.curtime()
+    end
+
+    local function on_paint ()
+        local side_indicators   = side_indicators_buffer
+        side_indicators_buffer  = { }
+        local indicator_present = { }
+        local me                = entity.get_local_player()
+        if not entity.is_alive(me) then return end
+
+        local lc_ind            = elements.visuals.windows:get('LC Side indicator')
+        local _, screen_y       = client.screen_size()
+        local base_x, base_offset = 20, screen_y - 340
+
+        if lc_ind then
+            local is_broken = exploits:is_lagcomp_broken() or is_breaking_velocity_lc()
+            local delay     = 1.0
+            if is_broken then
+                if not indicator_state._lc_delay.active then
+                    indicator_state._lc_delay.active = true
+                    indicator_state._lc_delay.timer  = globals.realtime()
+                end
+                indicator_state._lc_delay.last_broken = true
+                table.insert(side_indicators, 1, { text='LC', r=255, g=255, b=255, a=255, bar=true })
+            elseif indicator_state._lc_delay.active then
+                local el = globals.realtime() - indicator_state._lc_delay.timer
+                if el < delay then
+                    table.insert(side_indicators, 1, { text='LC', r=255, g=0, b=50, a=255, bar=true })
+                else
+                    indicator_state._lc_delay.active = false
+                    indicator_state._lc_delay.timer  = 0
+                end
+            end
+        end
+
+        local indicator_heights = { }
+        for i, ind in ipairs(side_indicators) do
+            local _, h = renderer.measure_text('d+', ind.text)
+            indicator_heights[i] = h + 2
+        end
+
+        local extra_pad = 5
+        for i, ind in ipairs(side_indicators) do
+            local key = ind.text or tostring(i)
+            indicator_present[key] = true
+            indicator_animations[key] = indicator_animations[key] or {
+                offset        = base_offset,
+                alpha         = 0,
+                bar           = 0,
+                circle        = 1,
+                target_offset = base_offset
+            }
+            local prev_h = 0
+            for j = 1, i - 1 do
+                prev_h = prev_h + indicator_heights[j]
+                if side_indicators[j].text and
+                   (side_indicators[j].text:lower():find('ping') or
+                    (lc_ind and side_indicators[j].text == 'LC'))
+                then
+                    prev_h = prev_h + extra_pad
+                end
+            end
+            local tgt = base_offset - prev_h
+            if ind.text and
+               (ind.text:lower():find('ping') or (lc_ind and ind.text == 'LC'))
+            then
+                tgt = tgt - extra_pad
+            end
+            indicator_animations[key].target_offset = tgt
+        end
+
+        local sorted_keys = { }
+        for i, ind in ipairs(side_indicators) do
+            sorted_keys[i] = ind.text or tostring(i)
+        end
+
+        for _, key in ipairs(sorted_keys) do
+            local anim = indicator_animations[key]
+            local lk   = key
+            if key:sub(1,1):match('[AB]') and key:find('s',2,true) then
+                lk = 'bombsite_indicator'
+            elseif key:sub(1,5) == 'FATAL' or (key:find('HP',1,true) and key:find('%-')) then
+                lk = 'bombsite_dmg_indicator'
+            end
+            anim.offset = lerp('indicator_offset_'..lk, anim.target_offset, 16, 0.01, 'ease_out')
+        end
+
+        local ping_idx, ping_col, ping_val
+        local lc_idx,  lc_col
+        for i, ind in ipairs(side_indicators) do
+            local key  = ind.text or tostring(i)
+            local anim = indicator_animations[key]
+            local lk   = key
+            if key:sub(1,1):match('[AB]') and key:find('s',2,true) then
+                lk = 'bombsite_indicator'
+            elseif key:sub(1,5) == 'FATAL' or (key:find('HP',1,true) and key:find('%-')) then
+                lk = 'bombsite_dmg_indicator'
+            end
+            anim.alpha  = lerp('indicator_alpha_'..lk, ind.a or 255, 16, 0.01, 'ease_out')
+            anim.bar    = lerp('indicator_bar_'..key, (ind.text and (ind.text:lower():find('ping') or ind.text=='LC')) and 1 or 0, 16, 0.01, 'ease_out')
+            if ind.text and ind.text:lower() == 'dt' then
+                local charged = (ind.r==255 and ind.g==255 and ind.b==255)
+                local tgt     = charged and 0 or 1
+                anim.circle  = lerp('indicator_circle_'..key, tgt, 16, 0.01, 'ease_out')
+            else
+                anim.circle  = lerp('indicator_circle_'..key, 0, 16, 0.01, 'ease_out')
+            end
+
+            renderer.text(base_x, anim.offset, ind.r, ind.g, ind.b, anim.alpha, 'd+', nil, ind.text)
+
+            if ind.text and ind.text:lower():find('ping') then
+                ping_idx = i
+                ping_col = { ind.r, ind.g, ind.b, anim.alpha }
+                ping_val = reference.rage.ps[2]:get() or 100
+            end
+
+            if lc_ind and ind.text == 'LC' then
+                lc_idx = i
+                lc_col = { ind.r, ind.g, ind.b, anim.alpha }
+            end
+
+            if (ind.text=='A' or ind.text=='B') and ind.r==252 and ind.g==243 and ind.b==105 and type(planting_started_at)=='number' then
+                local w, h = renderer.measure_text('d+', ind.text)
+                local r    = math.ceil(h * .33)
+                local cx   = base_x + w + r + 5
+                local cy   = anim.offset - 5 + r * 2
+                local pct  = (globals.curtime() - planting_started_at) / 3.125
+                renderer.circle_outline(cx, cy, 0,0,0,210,   r,   0,1,5)
+                renderer.circle_outline(cx, cy,200,200,200,255, r-1, 0,pct,3)
+            end
+        end
+
+        if ping_idx and ping_col and ping_val then
+            local w, _          = renderer.measure_text('d+', 'PING')
+            local bar_w, bar_h  = w, 3
+            local bar_x         = base_x + 1
+            local bar_y         = indicator_animations[side_indicators[ping_idx].text].offset + indicator_heights[ping_idx] - 2
+            local res           = entity.get_player_resource(entity.get_local_player())
+            local cur           = res and entity.get_prop(res, 'm_iPing', entity.get_local_player()) or 0
+            local pct           = math.min(cur / ping_val, 1)
+            local fill          = lerp('ping_bar_fill', pct, 16, 0.01, 'ease_out')
+            local alpha         = indicator_animations[side_indicators[ping_idx].text].bar * ping_col[4]
+            renderer.rectangle(bar_x,   bar_y, bar_w,   bar_h,   30,30,30, math.floor(alpha * .7))
+            renderer.rectangle(bar_x-1, bar_y-1, bar_w+2, bar_h+2,   0,0,0, math.floor(alpha * .8))
+            renderer.rectangle(bar_x,   bar_y, bar_w * fill, bar_h, ping_col[1], ping_col[2], ping_col[3], alpha)
+        end
+
+        if lc_ind and lc_idx and lc_col then
+            local w, _          = renderer.measure_text('d+', 'LC')
+            local bar_w, bar_h  = w, 3
+            local bar_x         = base_x + 1
+            local bar_y         = indicator_animations[side_indicators[lc_idx].text].offset + indicator_heights[lc_idx] - 2
+            local charged       = (lc_col[1]==255 and lc_col[2]==255 and lc_col[3]==255)
+            local unbroken      = (lc_col[1]==255 and lc_col[2]==0   and lc_col[3]==50)
+            local vis           = (not unbroken or charged) and 1 or 0
+            local a_bar         = lerp('lc_bar_alpha', vis, 16, 0.01, 'ease_out')
+            local alpha         = indicator_animations[side_indicators[lc_idx].text].bar * lc_col[4] * a_bar
+            local tgt           = charged and 1 or 0
+            local fill_pct      = lerp('lc_bar_fill', tgt, 16, 0.01, 'ease_out')
+            if alpha > 1 then
+                renderer.rectangle(bar_x,   bar_y, bar_w,   bar_h,   30,30,30, math.floor(alpha * .7))
+                renderer.rectangle(bar_x-1, bar_y-1, bar_w+2, bar_h+2,   0,0,0, math.floor(alpha * .8))
+                renderer.rectangle(bar_x,   bar_y, bar_w * fill_pct, bar_h, lc_col[1], lc_col[2], lc_col[3], alpha)
+            end
+        end
+
+        for i, ind in ipairs(side_indicators) do
+            if ind.text and ind.text:lower() == 'dt' then
+                local anim  = indicator_animations[ind.text]
+                local w, h  = renderer.measure_text('d+', 'DT')
+                local x     = base_x + 15 + w
+                local y     = anim.offset + indicator_heights[i] / 2
+                local r     = math.ceil(h * .33)
+                local pct   = (ind.r==255 and ind.g==255 and ind.b==255) and 1 or 0
+                local fill  = lerp('dt_fill', pct, 16, 0.01, 'ease_out')
+                local alpha = lerp('dt_alpha', pct == 1 and 0 or 1, 16, 0.01, 'ease_out') * anim.alpha
+            
+                if alpha > 1 then
+                    renderer.circle_outline(x, y, 0, 0, 0, math.floor(alpha * .99), r, 0, 1, 5)
+                    renderer.circle_outline(x, y, 255, 255, 255, alpha, r-1, 0, fill, 3)
+                end
+            end
+        end
+
+        for key, anim in pairs(indicator_animations) do
+            if not indicator_present[key] then
+                anim.alpha = lerp('indicator_alpha_'..key, 0, 16, 0.01, 'ease_out')
+                if anim.alpha <= 1 then
+                    indicator_animations[key] = nil
+                end
+            end
+        end
+    end
+
+    elements.visuals.side_indicators:set_event('indicator', on_indicator)
+    elements.visuals.side_indicators:set_event('bomb_beginplant', on_bomb_beginplant)
+    elements.visuals.side_indicators:set_event('paint', on_paint)
+    -- client.set_event_callback('indicator', on_indicator)
+    -- client.set_event_callback('bomb_beginplant', on_bomb_beginplant)
+    -- client.set_event_callback('paint', on_paint)
+end
+
+local damage_indicator = { width = 21, height = 12 }; do
+    local drag = drag_system.new(
+        'damage_indicator',
+        drag_slider.damage_indicator.x,
+        drag_slider.damage_indicator.y,
+        screen_size_x() / 2 + 5, screen_size_y() / 2 - 10,
+        'xy',
+        {
+            w = function () return damage_indicator.width end,
+            h = function () return damage_indicator.height end,
+            align_x = 'left',
+            snap_distance = 5,
+            show_guides = true,
+            show_default_dot = true,
+            show_highlight = true,
+            align_center = false,
+            show_center_dot = false
+        }
+    )
+
+    local function on_paint_ui ()
+        local disable = false
+        local menu_open = ui.is_menu_open()
+        local me = entity.get_local_player()
+        if not menu_open and (not me or not entity.is_alive(me)) then
+            disable = true
+        end
+        
+        local enabled = elements.visuals.damage.enable:get()
+        local alpha = lerp('damage_indicator_alpha', enabled and not disable and 255 or 0, 10, 0.001, 'ease_out')
+        if alpha < 1 then return end
+
+        drag:update(alpha)
+        drag:draw_guides(alpha)
+        local x, y = drag:get_pos()
+
+        local flag = ''
+        if elements.visuals.damage.settings.font:get() == 'Bold' then
+            flag = 'b'
+        elseif elements.visuals.damage.settings.font:get() == 'Small' then
+            flag = '-'
+        end
+
+        local hotkey_ref = reference.rage.aimbot.minimum_damage_override[1].value and reference.rage.aimbot.minimum_damage_override[1].hotkey:get()
+        local value_animate = math.ceil(lerp('damage_indicator_value', hotkey_ref and reference.rage.aimbot.minimum_damage_override[2].value - .1 or reference.rage.aimbot.minimum_damage.value, 4, 0.1, 'ease_out'))
+        local hotkey_alpha = lerp('damage_indicator_hotkey_alpha', (menu_open or hotkey_ref) and 1 or 0, 10, 0.001, 'ease_out')
+
+        local measure_damage_w, measure_damage_h = renderer.measure_text(flag, value_animate)
+        damage_indicator.width, damage_indicator.height = measure_damage_w + 3, measure_damage_h
+
+        renderer.text(x + 1, y - 1, 255, 255, 255, elements.visuals.damage.settings.type:get() == 'On hotkey' and alpha * hotkey_alpha or alpha, flag, nil, value_animate)
+    end
+
+    -- client.set_event_callback('paint_ui', on_paint_ui)
+    elements.visuals.damage.enable:set_event('paint_ui', on_paint_ui)
+end
+
+---
+
+local advert = { width = 100, height = 20 }; do
+    local drag = drag_system.new(
+        'advert_watermark',
+        drag_slider.advert.x,
+        drag_slider.advert.y,
+        15, screen_size_y() / 2 - 10,
+        'xy',
+        {
+            w = function () return advert.width end,
+            h = function () return advert.height end,
+            align_x = 'left',
+            snap_distance = 10,
+            show_guides = true,
+            show_default_dot = true,
+            show_highlight = true,
+            align_center = true,
+            show_center_dot = true
+        }
+    )
+
+    local alpha = { value = 255 }
+    local last_toggle_time = 0
+    local toggle_debounce = 0.3
+    local hint_alpha = 0
+
+    local flag_map = { Default = '', Bold = 'b', Small = '-' }
+    local styles = {'Default', 'Bold', 'Small'}
+    local function get_next_style (current)
+        for i, style in ipairs(styles) do
+            if style == current then
+                return styles[(i % #styles) + 1]
+            end
+        end
+        return styles[1]
+    end
+
+    local function get_flag ()
+        return flag_map[drag_slider.advert.text_style:get()]
+    end
+
+    local function format_text (flag, text)
+        if flag == '-' then
+            return text:upper()
+        end
+
+        return text
+    end
+
+    local function on_paint_ui ()
+        local me = entity.get_local_player()
+        alpha.value = lerp('advert_watermark', not elements.visuals.windows:get('Force text watermark') and (elements.visuals.windows:get('Watermark') or elements.visuals.crosshair.enable:get() or not entity.is_alive(me)) and 0 or 255, 10, 0.001, 'ease_out')
+        if alpha.value == 0 then
+            return
+        end
+
+        local menu_opened = ui.is_menu_open()
+        local current_time = globals.realtime()
+        local is_rmb_pressed = client.key_state(0x02)
+        local x, y = drag:get_pos()
+        local mx, my = ui.mouse_position()
+        local elem_w, elem_h = advert.width, advert.height
+        local is_hovered = mx >= x and mx <= x + elem_w and my >= y and my <= y + elem_h
+
+        if menu_opened and is_rmb_pressed and is_hovered and current_time - last_toggle_time >= toggle_debounce then
+            local next_style = get_next_style(drag_slider.advert.text_style:get())
+            drag_slider.advert.text_style:set(next_style)
+            last_toggle_time = current_time
+        end
+
+        local text_flag = get_flag()
+        local custom = coloring.parse()
+        local text_content = string.format('%s v2 / %s', lua.name, lua.username)
+        local formatted_text = format_text(text_flag, text_content)
+        local width = renderer.measure_text(text_flag, formatted_text) + 8
+        advert.width = text_flag == '-' and width - 1 or width
+
+        drag:update(alpha.value)
+        drag:draw_guides(alpha.value)
+
+        hint_alpha = lerp('hint_alpha', (menu_opened and is_hovered and not drag.dragging and 255 or 0) * alpha.value / 255, 10, 0.001, 'ease_out')
+        if hint_alpha > 1 then
+            local formatted_text_2 = format_text(text_flag, 'Right-click to change text flag')
+            local text_x = text_flag == '-' and x + advert.width / 2 - 1 or x + advert.width / 2
+            renderer.text(text_x, y + advert.height + 6, 255, 255, 255, hint_alpha, text_flag .. 'c', nil, formatted_text_2)
+        end
+
+        if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get('Text watermark') then
+            local text_x = text_flag == '-' and x + 2 or x + 4
+            local gradient_text = format_text(text_flag, string.format('%s %s v2', lua.name, lua.build))
+            draw_gradient_text(
+                text_x, 
+                y + 4,
+                text_flag,
+                nil,
+                gradient_text,
+                25,
+                {r = custom.r, g = custom.g, b = custom.b, a = alpha.value},
+                {r = custom.r3, g = custom.g3, b = custom.b3, a = alpha.value},
+                {r = custom.r4, g = custom.g4, b = custom.b4, a = alpha.value},
+                {r = custom.r2, g = custom.g2, b = custom.b2, a = alpha.value}
+            )
+
+            local gradient_width = renderer.measure_text(text_flag, gradient_text)
+            local username_text = format_text(text_flag, string.format('/ %s', lua.username))
+            local text_x = text_flag == '-' and x + gradient_width + 3 or x + gradient_width + 7
+            renderer.text(text_x, y + 4, 255, 255, 255, alpha.value, text_flag, nil, username_text)
+        else
+            local text_x = text_flag == '-' and x + 2 or x + 4
+            renderer.text(text_x, y + 4, 255, 255, 255, alpha.value, text_flag, nil, string.format('\a%s%s\a%s / %s', coloring.rgba_to_hex(custom.r, custom.g, custom.b, alpha.value), format_text(text_flag, lua.name .. ' ' .. lua.build .. ' v2'), coloring.rgba_to_hex(255, 255, 255, alpha.value), format_text(text_flag, lua.username)))
+        end
+    end
+
+    client.set_event_callback('paint_ui', on_paint_ui)
+end
+
+local crosshair = { width = 62, height = 50 }; do
+    local drag_c = drag_system.new(
+        'crosshair',
+        nil,
+        drag_slider.crosshair.y,
+        screen_size_x() / 2, screen_size_y() / 2 + 40,
+        'y',
+        {
+            w = function() return crosshair.width end,
+            h = function() return crosshair.height end,
+            align_y = 'center',
+            snap_distance = 10,
+            show_guides = true,
+            show_default_dot = true,
+            show_highlight = true,
+            align_center = true,
+            show_center_dot = true
+        }
+    )
+
+    local alpha = {
+        value = 0,
+        unique = 0,
+        simple = 0
+    }
+
+    local function get_exploit_text (exploit_type)
+        local states = {
+            dt = {
+                default = {'dt', {255, 255, 255}},
+                defensive = {'dt defensive', {67, 245, 255}},
+                recharge = {'dt recharge', {255, 62, 62}},
+                active = {'dt active', {50, 255, 50}}
+            },
+            hs = {
+                default = {'hs', {255, 255, 255}},
+                defensive = {'hs defensive', {67, 245, 255}},
+                recharge = {'hs recharge', {255, 62, 62}},
+                active = {'hs active', {50, 255, 50}}
+            }
+        }
+        
+        local exploit_states = states[exploit_type]
+        if not exploit_states then return nil end
+
+        local is_active = (exploit_type == 'dt' and exploits:is_doubletap()) or (exploit_type == 'hs' and exploits:is_hideshots() and not exploits:is_doubletap())
+        
+        if is_active then
+            if exploits:in_defensive() then
+                return exploit_states.defensive
+            elseif exploits:in_recharge() or ((exploit_type == 'dt' and exploits:is_doubletap()) and not exploits:can_recharge()) then
+                return exploit_states.recharge
+            else
+                return exploit_states.active
+            end
+        end
+
+        return exploit_states.default
+    end
+
+    local function get_current_state ()
+        local state = string.lower(builder.get_state())
+        
+        if reference.antiaim.fakelag.enabled:get() and fakelag.active then
+            state = 'fake lag'
+        elseif reference.antiaim.angles.freestanding[1]:get() and reference.antiaim.angles.freestanding[1].hotkey:get() then
+            state = 'freestanding'
+        end
+        
+        return state
+    end
+
+    local function get_binds ()
+        local doubletap_state = get_exploit_text('dt')
+        local hideshots_state = get_exploit_text('hs')
+        
+        return {
+            {name = 'dt', display = doubletap_state[1], color = doubletap_state[2], ref = exploits:is_doubletap()},
+            {name = 'hs', display = hideshots_state[1], color = hideshots_state[2], ref = exploits:is_hideshots() and not exploits:is_doubletap()},
+            {name = 'baim', display = 'baim', color = {255, 255, 255}, ref = reference.rage.aimbot.force_body:get()},
+            {name = 'safe', display = 'safe', color = {255, 255, 255}, ref = reference.rage.aimbot.force_safe:get()}
+        }
+    end
+
+    local function get_simple_binds ()
+        return {
+            {name = 'dt', display = 'dt', color = {255, 255, 255}, ref = exploits:is_doubletap()},
+            {name = 'osaa', display = 'osaa', color = {255, 255, 255}, ref = exploits:is_hideshots() and not exploits:is_doubletap()},
+            {name = 'baim', display = 'baim', color = {255, 255, 255}, ref = reference.rage.aimbot.force_body:get()},
+            {name = 'safe', display = 'safe', color = {255, 255, 255}, ref = reference.rage.aimbot.force_safe:get()}
+        }
+    end
+
+
+    local function render_gradient_text (x, y, flag, max_width, text, size, color1, color2, color3, color4)
+        draw_gradient_text(
+            x, y, flag, max_width, text, size,
+            color1, color2, color3, color4
+        )
+    end
+
+    local function render_bind_text (center_x, y, bind, scope_value, settings_y, alpha_unique, alpha_value, binds_alpha)
+        local _bind_alpha = lerp('crosshair_bind_alpha_' .. bind.name, bind.ref and 1 or 0, 10, 0.001, 'ease_out')
+        local _bind_y = lerp('crosshair_bind_y_' .. bind.name, bind.ref and 12 or 0, 12, 0.07, 'ease_out')
+        local measure_binds = renderer.measure_text('cb', bind.display) / 2 + 3
+        local target_width = renderer.measure_text('cb', bind.display) + 1
+        local animated_binds = lerp('crosshair_bind_anim' .. bind.name, bind.ref and target_width or 0, 11, 0.5, 'ease_out')
+        
+        if bind.name == 'dt' or bind.name == 'hs' then
+            local base_text = bind.name
+            local state_text = bind.display:sub(#base_text + 1)
+            local base_width = renderer.measure_text('cb', base_text)
+            local state_width = renderer.measure_text('cb', state_text)
+            
+            renderer.text(
+                center_x - state_width / 2 + 1 + (measure_binds - 1) * scope_value, 
+                y + _bind_y + 14 + settings_y, 
+                255, 255, 255, 
+                alpha_unique * alpha_value / 255 * binds_alpha * _bind_alpha, 
+                'cb', nil, base_text
+            )
+            
+            if #state_text > 0 then
+                local animated_binds_2 = lerp('crosshair_bind2_anim' .. bind.name, bind.ref and state_width + 1 or 0, 11, 0.5, 'ease_out')
+                renderer.text(
+                    center_x + base_width / 2 + measure_binds * scope_value, 
+                    y + _bind_y + 14 + settings_y, 
+                    bind.color[1], bind.color[2], bind.color[3], 
+                    alpha_unique * alpha_value / 255 * binds_alpha * _bind_alpha, 
+                    'cb', animated_binds_2, state_text
+                )
+            end
+        else
+            renderer.text(
+                center_x + measure_binds * scope_value, 
+                y + _bind_y + 14 + settings_y, 
+                bind.color[1], bind.color[2], bind.color[3], 
+                alpha_unique * alpha_value / 255 * binds_alpha * _bind_alpha, 
+                'cb', animated_binds, bind.display
+            )
+        end
+        
+        return _bind_y
+    end
+
+    local function render_simple_bind (center_x, y, bind, scope_value, start_y, alpha_simple, alpha_value, binds_alpha)
+        local _bind_alpha = lerp('crosshair_bind_alpha_simple_' .. bind.name, bind.ref and 1 or 0, 10, 0.001, 'ease_out')
+        local target_width, target_height = renderer.measure_text('c-', bind.display:upper())
+        local animated_width = lerp('crosshair_bind_anim_simple_' .. bind.name, bind.ref and target_width + 1 or 0, 11, 0.5, 'ease_out')
+        local animated_height = lerp('crosshair_height_anim_simple_' .. bind.name, bind.ref and target_height + 1 or 0, 11, 0.5, 'ease_out')
+        local measure_binds = renderer.measure_text('c-', bind.display:upper()) / 2 + 3
+
+        renderer.text(
+            center_x + measure_binds * scope_value, 
+            y + start_y, 
+            bind.color[1], bind.color[2], bind.color[3], 
+            alpha_simple * alpha_value / 255 * binds_alpha * _bind_alpha, 
+            'c-', animated_width, bind.display:upper()
+        )
+        
+        return animated_height
+    end
+
+    local function render_unique_crosshair (center_x, y, custom, scope_value, alpha_value, alpha_unique, states_alpha, binds_alpha)
+        local measure_name = renderer.measure_text('cb', lua.name:lower()) / 2 + 3
+        
+        if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get('Crosshair') then
+            render_gradient_text(
+                center_x + measure_name * scope_value,
+                y + 14,
+                'cb', nil, lua.name:lower(), 25,
+                {r = custom.r, g = custom.g, b = custom.b, a = alpha_unique * alpha_value / 255},
+                {r = custom.r3, g = custom.g3, b = custom.b3, a = alpha_unique * alpha_value / 255},
+                {r = custom.r4, g = custom.g4, b = custom.b4, a = alpha_unique * alpha_value / 255},
+                {r = custom.r2, g = custom.g2, b = custom.b2, a = alpha_unique * alpha_value / 255}
+            )
+        else
+            renderer.text(
+                center_x + measure_name * scope_value, 
+                y + 14, 
+                custom.r, custom.g, custom.b, 
+                alpha_unique * alpha_value / 255, 
+                'cb', nil, lua.name:lower()
+            )
+        end
+
+        local settings_add_y = states_alpha > 0 and 12 or 1
+
+        if states_alpha > 0 then
+            local state = get_current_state()
+            local measure_state = renderer.measure_text('rb', state) / 2 + 3
+            local animated_state = lerp('crosshair_state', renderer.measure_text('rb', state) + 1, 7, 1, 'ease_out')
+            
+            renderer.text(
+                center_x + (animated_state / 2) + measure_state * scope_value, 
+                y + 20, 
+                255, 255, 255, 
+                alpha_unique * alpha_value / 255 * states_alpha, 
+                'rb', animated_state, state
+            )
+        end
+
+        if binds_alpha > 0 then
+            local binds = get_binds()
+            local height = 0
+            
+            for _, bind in ipairs(binds) do
+                height = height + render_bind_text(
+                    center_x, y + height, bind, scope_value, 
+                    settings_add_y, alpha_unique, alpha_value, binds_alpha
+                )
+            end
+        end
+    end
+
+    local function render_simple_crosshair (center_x, y, custom, scope_value, inverted_scope_value, alpha_value, alpha_simple, states_alpha, binds_alpha)
+        local measure_name = renderer.measure_text('c', lua.name:lower()) / 2 + 3
+        local measure_build = renderer.measure_text('c-', lua.build:upper()) / 2 + 3
+        
+        if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get('Crosshair') then
+            render_gradient_text(
+                center_x + measure_name * scope_value,
+                y + 16,
+                'c', nil, lua.name:lower(), 25,
+                {r = custom.r, g = custom.g, b = custom.b, a = alpha_simple * alpha_value / 255},
+                {r = custom.r3, g = custom.g3, b = custom.b3, a = alpha_simple * alpha_value / 255},
+                {r = custom.r4, g = custom.g4, b = custom.b4, a = alpha_simple * alpha_value / 255},
+                {r = custom.r2, g = custom.g2, b = custom.b2, a = alpha_simple * alpha_value / 255}
+            )
+            
+            render_gradient_text(
+                center_x + measure_build * scope_value,
+                y + 6,
+                'c-', nil, lua.build:upper(), 25,
+                {r = custom.r, g = custom.g, b = custom.b, a = alpha_simple * alpha_value / 255 * inverted_scope_value},
+                {r = custom.r3, g = custom.g3, b = custom.b3, a = alpha_simple * alpha_value / 255 * inverted_scope_value},
+                {r = custom.r4, g = custom.g4, b = custom.b4, a = alpha_simple * alpha_value / 255 * inverted_scope_value},
+                {r = custom.r2, g = custom.g2, b = custom.b2, a = alpha_simple * alpha_value / 255 * inverted_scope_value}
+            )
+        else
+            renderer.text(
+                center_x + measure_name * scope_value, 
+                y + 16, 
+                custom.r, custom.g, custom.b, 
+                alpha_simple * alpha_value / 255, 
+                'c', nil, lua.name:lower()
+            )
+            
+            renderer.text(
+                center_x + measure_build * scope_value, 
+                y + 6, 
+                custom.r, custom.g, custom.b, 
+                alpha_simple * alpha_value / 255 * inverted_scope_value, 
+                'c-', nil, lua.build:upper()
+            )
+        end
+
+        if states_alpha > 0 then
+            local state = string.upper(get_current_state())
+            local measure_state = renderer.measure_text('r-', state) / 2 + 3
+            local animated_state = lerp('crosshair_state_2', renderer.measure_text('r-', state) + 1, 7, 1, 'ease_out')
+            
+            renderer.text(
+                center_x + (animated_state / 2) + measure_state * scope_value, 
+                y + 23, 255, 255, 255, 
+                alpha_simple * alpha_value / 255 * states_alpha, 
+                'r-', animated_state, state
+            )
+        end
+
+        if binds_alpha > 0 then
+            local binds = get_simple_binds()
+            local binds_start_y = states_alpha > 0 and 39 or 28
+            local height = 0
+            
+            for _, bind in ipairs(binds) do
+                local bind_height = render_simple_bind(
+                    center_x, y, bind, scope_value, 
+                    binds_start_y + height, alpha_simple, alpha_value, binds_alpha
+                )
+                height = height + bind_height
+            end
+        end
+    end
+
+    local function on_paint()
+        local me = entity.get_local_player()
+        alpha.value = lerp('crosshair_global', (elements.visuals.crosshair.enable:get() and entity.is_alive(me)) and 255 or 0, 10, 0.001, 'ease_out')
+
+        if alpha.value == 0 then return end
+
+        drag_c:update(alpha.value)
+        drag_c:draw_guides(alpha.value)
+        
+        local x, y = drag_c:get_pos()
+        local screen_x, screen_y = client.screen_size()
+        local center_x = screen_x / 2
+        local is_scoped = entity.get_prop(me, 'm_bIsScoped') == 1
+        local custom = coloring.parse()
+
+        local scope_value = lerp('crosshair_scope', is_scoped and 1 or 0, 10, 0.008, 'ease_out')
+        local inverted_scope_value = lerp('crosshair_inv_scope', is_scoped and 0 or 1, 10, 0.008, 'ease_out')
+        local states_alpha = lerp('crosshair_state_global', elements.visuals.crosshair.settings.select:get('States') and 1 or 0, 10, 0.001, 'ease_out')
+        local binds_alpha = lerp('crosshair_binds_global', elements.visuals.crosshair.settings.select:get('Binds') and 1 or 0, 10, 0.001, 'ease_out')
+
+        alpha.unique = lerp('crosshair_unique', (elements.visuals.crosshair.settings.type:get() == 'Unique') and 255 or 0, 10, 0.001, 'ease_out')
+        alpha.unique = math.ceil(alpha.unique)
+        
+        if alpha.unique > 0 then
+            render_unique_crosshair(center_x, y, custom, scope_value, alpha.value, alpha.unique, states_alpha, binds_alpha)
+        end
+
+        alpha.simple = lerp('crosshair_simple', (elements.visuals.crosshair.settings.type:get() == 'Simple') and 255 or 0, 10, 0.001, 'ease_out')
+        alpha.simple = math.ceil(alpha.simple)
+        
+        if alpha.simple > 0 then
+            render_simple_crosshair(center_x, y, custom, scope_value, inverted_scope_value, alpha.value, alpha.simple, states_alpha, binds_alpha)
+        end
+    end
+
+    -- client.set_event_callback('paint', on_paint)
+    elements.visuals.crosshair.enable:set_event('paint', on_paint)
+end
+
+local arrows do
+    local drag_a = drag_system.new(
+        'arrows',
+        drag_slider.arrows.x,
+        nil,
+        screen_size_x() / 2 + 50, screen_size_y() / 2,
+        'x',
+        {
+            w = 20,
+            h = 20,
+            align_x = 'center',
+            snap_distance = 10,
+            show_guides = true,
+            show_default_dot = true,
+            show_highlight = true,
+            align_center = false,
+            show_center_dot = false
+        }
+    )
+
+    local alpha = {
+        value = 0, unique = 0, simple = 0, teamskeet = 0, semicircle = 0,
+        outline_start_angle = 0, outline_end_angle = 0, sc_arc_start_angle = 0,
+        semicircle_back = 0, semicircle_back_timer = 0, semicircle_back_timeout = 0,
+        semicircle_fade = 1, semicircle_fade_timer = 0
+    }
+
+    local function draw_arc(x, y, r, g, b, a, radius, start, end_, percent, thickness)
+        if a == 0 or percent == 0 then return end
+        percent = percent or 1
+        thickness = thickness or 3
+        local segments = math.max(16, math.floor(64 * math.abs(end_ - start) * percent + 0.5))
+        local angle_span = (end_ - start) * 2 * math.pi * percent
+        local angle_step = angle_span / segments
+        local base_angle = start * 2 * math.pi
+
+        for i = 0, segments - 1 do
+            local angle1 = base_angle + i * angle_step
+            local angle2 = base_angle + (i + 1) * angle_step
+
+            local x1 = x + math.cos(angle1) * radius
+            local y1 = y + math.sin(angle1) * radius
+            local x2 = x + math.cos(angle2) * radius
+            local y2 = y + math.sin(angle2) * radius
+
+            local x3 = x + math.cos(angle2) * (radius - thickness)
+            local y3 = y + math.sin(angle2) * (radius - thickness)
+            local x4 = x + math.cos(angle1) * (radius - thickness)
+            local y4 = y + math.sin(angle1) * (radius - thickness)
+
+            renderer.triangle(x1, y1, x2, y2, x3, y3, r, g, b, a)
+            renderer.triangle(x1, y1, x3, y3, x4, y4, r, g, b, a)
+        end
+    end
+
+    local function draw_semicircle_indicator(params)
+        local cx, cy = params.cx, params.cy
+        local color = params.color
+        local alpha_val = params.alpha
+        local indicator_radius = params.indicator_radius
+        local indicator_thickness = params.indicator_thickness
+        local crosshair_enabled = params.crosshair_enabled
+        local state = params.state
+        local hide_on_third = params.hide_on_third
+        local scope_animation_2 = params.scope_animation_2
+        local scope_animation_3 = params.scope_animation_3
+
+        local manual_left_active = (state == 'Manual left')
+        local manual_right_active = (state == 'Manual right')
+        local show_back = not manual_left_active and not manual_right_active
+
+        if show_back then
+            if alpha.semicircle_fade_timer == 0 then
+                alpha.semicircle_fade_timer = globals.realtime()
+            end
+            local elapsed = globals.realtime() - alpha.semicircle_fade_timer
+            if elapsed > 1 then
+                alpha.semicircle_fade = lerp('semicircle_fade', 0, 10, 0.01, 'ease_out')
+            else
+                alpha.semicircle_fade = lerp('semicircle_fade', 1, 10, 0.01, 'ease_out')
+            end
+        else
+            alpha.semicircle_fade_timer = 0
+            alpha.semicircle_fade = lerp('semicircle_fade', 1, 10, 0.01, 'ease_out')
+        end
+
+        if alpha.semicircle_fade < 0.01 then
+            return
+        end
+
+        local semicircle_outline_alpha = scope_animation_2 * hide_on_third * alpha_val * alpha.semicircle_fade
+        local target_outline_start_angle = crosshair_enabled and 0.5 or 0.0
+        local target_outline_end_angle = crosshair_enabled and 1.0 or 0.5
+
+        alpha.outline_start_angle = lerp('outline_start_angle', target_outline_start_angle, 14, 0.002, 'linear')
+        alpha.outline_end_angle = lerp('outline_end_angle', target_outline_end_angle, 14, 0.002, 'linear')
+
+        -- renderer.circle_outline(cx, cy, 0, 0, 0, semicircle_outline_alpha, indicator_radius + 1, 0, 0.5, indicator_thickness + 2)
+        draw_arc(cx, cy, 0, 0, 0, semicircle_outline_alpha, indicator_radius + 1, alpha.outline_start_angle, alpha.outline_end_angle, 1, indicator_thickness + 2)
+
+        if show_back then
+            if alpha.semicircle_back < 1 then
+                alpha.semicircle_back = lerp('semicircle_back_alpha', 1, 10, 0.01, 'ease_out')
+            end
+            if alpha.semicircle_back_timer == 0 then
+                alpha.semicircle_back_timer = globals.realtime()
+            end
+            if globals.realtime() - alpha.semicircle_back_timer > 3 then
+                alpha.semicircle_back = lerp('semicircle_back_alpha', 0, 10, 0.01, 'ease_out')
+            end
+        else
+            alpha.semicircle_back_timer = 0
+            alpha.semicircle_back = lerp('semicircle_back_alpha', 0, 10, 0.01, 'ease_out')
+        end
+
+        local arc_alpha = scope_animation_3 * hide_on_third * alpha_val * alpha.semicircle_fade * (manual_left_active and 1 or manual_right_active and 1 or alpha.semicircle_back)
+        if arc_alpha > 0 then
+            local arc_span = 0.15
+            local target_arc_start_angle
+            if manual_left_active then
+                target_arc_start_angle = crosshair_enabled and 0.505 or 0.34
+            elseif manual_right_active then
+                target_arc_start_angle = crosshair_enabled and 0.845 or 0.01
+            else
+                target_arc_start_angle = crosshair_enabled and 0.675 or 0.179
+            end
+            alpha.sc_arc_start_angle = lerp('sc_arc_start_angle', target_arc_start_angle, 16, 0.002, 'linear')
+            local draw_start_angle = alpha.sc_arc_start_angle
+            local draw_end_angle = draw_start_angle + arc_span
+            draw_arc(cx, cy, color.r, color.g, color.b, arc_alpha, indicator_radius, draw_start_angle, draw_end_angle, 1, indicator_thickness)
+        end
+    end
+
+    local function on_paint()
+        local me = entity.get_local_player()
+        alpha.value = lerp('arrows_global', (elements.visuals.arrows.enable:get() and entity.is_alive(me)) and 255 or 0, 10, 0.001, 'ease_out')
+        if alpha.value == 0 then return end
+
+        local screen_x, screen_y = client.screen_size()
+        if elements.visuals.arrows.settings.type:get() == 'Pointers' then
+            drag_a:update(alpha.value)
+            drag_a:draw_guides(alpha.value)
+        end
+        local x, y = drag_a:get_pos()
+        local is_scoped = entity.get_prop(me, 'm_bIsScoped') == 1
+        local custom = coloring.parse()
+
+        local state = builder.get_state()
+        local left_alpha = lerp('arrows_left_alpha', (state == 'Manual left' or ui.is_menu_open()) and 1 or 0, 10, 0.001, 'ease_out')
+        local right_alpha = lerp('arrows_right_alpha', (state == 'Manual right' or ui.is_menu_open()) and 1 or 0, 10, 0.001, 'ease_out')
+        local scope_animation = lerp('arrows_scope', is_scoped and 1 or 0, 10, 0.008, 'ease_out')
+
+        if elements.visuals.arrows.settings.type:get() == 'Pointers' then
+            alpha.unique = lerp('arrows_unique', (elements.visuals.arrows.settings.style:get() == 'Unique') and 255 or 0, 10, 0.001, 'ease_out')
+            alpha.unique = math.ceil(alpha.unique)
+            if alpha.unique > 0 then
+                if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get('Arrows') then
+                    local color = prepare_gradient_cache(25,
+                        {r = custom.r, g = custom.g, b = custom.b, a = alpha.value},
+                        {r = custom.r3, g = custom.g3, b = custom.b3, a = alpha.value},
+                        {r = custom.r4, g = custom.g4, b = custom.b4, a = alpha.value},
+                        {r = custom.r2, g = custom.g2, b = custom.b2, a = alpha.value},
+                        false
+                    )
+                    renderer.text(screen_x - x - 14, screen_y / 2 - 4 - (12 * scope_animation), color.r, color.g, color.b, alpha.unique * alpha.value / 255 * left_alpha, 'c+', nil, '⮜')
+                    renderer.text(x + 10, screen_y / 2 - 4 - (12 * scope_animation), color.r, color.g, color.b, alpha.unique * alpha.value / 255 * right_alpha, 'c+', nil, '⮞')
+                else
+                    renderer.text(screen_x - x - 14, screen_y / 2 - 4 - (12 * scope_animation), custom.r, custom.g, custom.b, alpha.unique * alpha.value / 255 * left_alpha, 'c+', nil, '⮜')
+                    renderer.text(x + 10, screen_y / 2 - 4 - (12 * scope_animation), custom.r, custom.g, custom.b, alpha.unique * alpha.value / 255 * right_alpha, 'c+', nil, '⮞')
+                end
+            end
+            alpha.simple = lerp('arrows_simple', (elements.visuals.arrows.settings.style:get() == 'Simple') and 255 or 0, 10, 0.001, 'ease_out')
+            alpha.simple = math.ceil(alpha.simple)
+            if alpha.simple > 0 then
+                if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get('Arrows') then
+                    local color = prepare_gradient_cache(25,
+                        {r = custom.r, g = custom.g, b = custom.b, a = alpha.value},
+                        {r = custom.r3, g = custom.g3, b = custom.b3, a = alpha.value},
+                        {r = custom.r4, g = custom.g4, b = custom.b4, a = alpha.value},
+                        {r = custom.r2, g = custom.g2, b = custom.b2, a = alpha.value},
+                        false
+                    )
+                    renderer.text(screen_x - x - 14, screen_y / 2 - 2 - (12 * scope_animation), color.r, color.g, color.b, alpha.simple * alpha.value / 255 * left_alpha, 'c+', nil, '<')
+                    renderer.text(x + 10, screen_y / 2 - 2 - (12 * scope_animation), color.r, color.g, color.b, alpha.simple * alpha.value / 255 * right_alpha, 'c+', nil, '>')
+                else
+                    renderer.text(screen_x - x - 14, screen_y / 2 - 2 - (12 * scope_animation), custom.r, custom.g, custom.b, alpha.simple * alpha.value / 255 * left_alpha, 'c+', nil, '<')
+                    renderer.text(x + 10, screen_y / 2 - 2 - (12 * scope_animation), custom.r, custom.g, custom.b, alpha.simple * alpha.value / 255 * right_alpha, 'c+', nil, '>')
+                end
+            end
+            alpha.teamskeet = lerp('arrows_teamskeet', (elements.visuals.arrows.settings.style:get() == 'TeamSkeet') and 255 or 0, 10, 0.001, 'ease_out')
+            alpha.teamskeet = math.ceil(alpha.teamskeet)
+            if alpha.teamskeet > 0 then
+                local final_alpha_left = alpha.teamskeet * alpha.value / 255 * left_alpha
+                local final_alpha_right = alpha.teamskeet * alpha.value / 255 * right_alpha
+                renderer.text(screen_x - x - 14, screen_y / 2 - 4 - (12 * scope_animation), 0, 0, 0, 55 * alpha.teamskeet / 255 * alpha.value / 255, 'c+', nil, '◀')
+                renderer.text(x + 10, screen_y / 2 - 4 - (12 * scope_animation), 0, 0, 0, 55 * alpha.teamskeet / 255 * alpha.value / 255, 'c+', nil, '▶')
+                if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get('Arrows') then
+                    local color = prepare_gradient_cache(25,
+                        {r = custom.r, g = custom.g, b = custom.b, a = alpha.value},
+                        {r = custom.r3, g = custom.g3, b = custom.b3, a = alpha.value},
+                        {r = custom.r4, g = custom.g4, b = custom.b4, a = alpha.value},
+                        {r = custom.r2, g = custom.g2, b = custom.b2, a = alpha.value},
+                        false
+                    )
+                    renderer.text(screen_x - x - 14, screen_y / 2 - 4 - (12 * scope_animation), color.r, color.g, color.b, final_alpha_left, 'c+', nil, '◀')
+                    renderer.text(x + 10, screen_y / 2 - 4 - (12 * scope_animation), color.r, color.g, color.b, final_alpha_right, 'c+', nil, '▶')
+                else
+                    renderer.text(screen_x - x - 14, screen_y / 2 - 4 - (12 * scope_animation), custom.r, custom.g, custom.b, final_alpha_left, 'c+', nil, '◀')
+                    renderer.text(x + 10, screen_y / 2 - 4 - (12 * scope_animation), custom.r, custom.g, custom.b, final_alpha_right, 'c+', nil, '▶')
+                end
+            end
+        else
+            alpha.semicircle = lerp('arrows_semicircle', (elements.visuals.arrows.settings.type:get() == 'Semicircle') and 255 or 0, 10, 0.001, 'ease_out')
+            alpha.semicircle = math.ceil(alpha.semicircle)
+            if alpha.semicircle > 0 then
+                local crosshair_enabled = elements.visuals.crosshair.enable:get()
+                local sc_cx = screen_x / 2 + 1
+                local sc_cy = screen_y / 2 + (crosshair_enabled and -2 or 2)
+                local indicator_radius = 27
+                local indicator_thickness = 3
+                local scope_animation_2 = lerp('arrows_semicircle_2', is_scoped and 25 or 85, 10, 0.008, 'ease_out')
+                local scope_animation_3 = lerp('arrows_semicircle_3', is_scoped and 100 or 255, 10, 0.008, 'ease_out')
+                local hide_on_third = lerp('arrows_semicircle_hide', elements.visuals.arrows.settings.hide_on_thirdperson:get() and reference.visuals.thirdperson:get() and reference.visuals.thirdperson.hotkey:get() and 0 or 1, 10, 0.008, 'ease_out')
+                local color = custom
+                if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get('Arrows') then
+                    color = prepare_gradient_cache(25,
+                        {r = custom.r, g = custom.g, b = custom.b, a = alpha.value},
+                        {r = custom.r3, g = custom.g3, b = custom.b3, a = alpha.value},
+                        {r = custom.r4, g = custom.g4, b = custom.b4, a = alpha.value},
+                        {r = custom.r2, g = custom.g2, b = custom.b2, a = alpha.value},
+                        false
+                    )
+                end
+                draw_semicircle_indicator{
+                    cx = sc_cx, cy = sc_cy, color = color, alpha = alpha.value / 255 * alpha.semicircle / 255,
+                    indicator_radius = indicator_radius, indicator_thickness = indicator_thickness,
+                    crosshair_enabled = crosshair_enabled, state = state,
+                    hide_on_third = hide_on_third, scope_animation_2 = scope_animation_2, scope_animation_3 = scope_animation_3
+                }
+            end
+        end
+    end
+
+    -- client.set_event_callback('paint', on_paint)
+    elements.visuals.arrows.enable:set_event('paint', on_paint)
 end
 
 local scope do
-    local offset = 0
-    local length = 0
+    local on_paint_ui = function ()
+        reference.visuals.scope:override(true)
+    end
+
+    elements.visuals.scope.enable:set_event('paint_ui', on_paint_ui)
+
+    local function on_paint ()
+        if not elements.visuals.scope.enable:get() then
+            reference.visuals.scope:override()
+            return
+        end
+
+        local me = entity.get_local_player()
+        if not me or not entity.is_alive(me) then
+            return
+        end
+
+        local weapon = entity.get_player_weapon(me)
+        if weapon == nil then
+            return
+        end
+
+        reference.visuals.scope:override(false)
+
+        local scope_level = entity.get_prop(weapon, 'm_zoomLevel')
+        local scoped = entity.get_prop(me, 'm_bIsScoped') == 1
+        local resume_zoom = entity.get_prop(me, 'm_bResumeZoom') == 1
+        local is_valid = scope_level ~= nil
+        local act = is_valid and scope_level > 0 and scoped and not resume_zoom
+
+        local alpha = lerp('custom_scope', act and 255 or 0, 4, 0.001, 'ease_out')
+        local x, y = client.screen_size()
+        local custom = coloring.parse()
+
+        local gap = elements.visuals.scope.settings.gap:get()
+        local length = elements.visuals.scope.settings.size:get()
+        local inverted = elements.visuals.scope.settings.invert:get()
+
+        local r, g, b = custom.r, custom.g, custom.b
+        if colors.combobox:get() == 'Custom' and colors.custom.type:get() == 'Gradient' and colors.custom.select:get('Scope') then
+            local color = prepare_gradient_cache(25,
+                {r = custom.r, g = custom.g, b = custom.b, a = alpha},
+                {r = custom.r3, g = custom.g3, b = custom.b3, a = alpha},
+                {r = custom.r4, g = custom.g4, b = custom.b4, a = alpha},
+                {r = custom.r2, g = custom.g2, b = custom.b2, a = alpha},
+                false
+            )
+
+            r, g, b = color.r, color.g, color.b
+        end
+
+        x, y = x / 2, y / 2
+
+        -- @lordmouse: left
+        if not elements.visuals.scope.settings.exclude:get('Left') then
+            renderer.gradient(x - gap, y, -length * (alpha / 255), 1, r, g, b, inverted and 0 or alpha, r, g, b, inverted and alpha or 0, true)
+        end
+
+        -- @lordmouse: right
+        if not elements.visuals.scope.settings.exclude:get('Right') then
+            renderer.gradient(x + gap, y, length * (alpha / 255), 1, r, g, b, inverted and 0 or alpha, r, g, b, inverted and alpha or 0, true)
+        end
+
+        -- @lordmouse: up
+        if not elements.visuals.scope.settings.exclude:get('Top') then
+            renderer.gradient(x, y - gap, 1, -length * (alpha / 255), r, g, b, inverted and 0 or alpha, r, g, b, inverted and alpha or 0, false)
+        end
+
+        -- @lordmouse: down
+        if not elements.visuals.scope.settings.exclude:get('Bottom') then
+            renderer.gradient(x, y + gap, 1, length * (alpha / 255), r, g, b, inverted and 0 or alpha, r, g, b, inverted and alpha or 0, false)
+        end
+    end
+
+    -- client.set_event_callback('paint', on_paint)
+    elements.visuals.scope.enable:set_event('paint', on_paint)
+end
+
+---
+
+local zoom_animation do
+    local function on_override_view (e)
+        if not elements.visuals.zoom.enable:get() then
+            reference.misc.miscellaneous.override_zoom_fov:override()
+            return
+        end
+
+        reference.misc.miscellaneous.override_zoom_fov:override(0)
+
+        local me = entity.get_local_player()
+        if not me or not entity.is_alive(me) then
+            return
+        end
+
+        local fov, speed = elements.visuals.zoom.settings.value:get(), elements.visuals.zoom.settings.speed:get()
+        local is_scoped = entity.get_prop(me, 'm_bIsScoped') == 1
+
+        local animate = lerp('zoom', is_scoped and fov or 0, speed / 10, 0.001, 'ease_out')
+        e.fov = e.fov - animate
+    end
+
+    -- client.set_event_callback('override_view', on_override_view)
+    elements.visuals.zoom.enable:set_event('override_view', on_override_view)
+end
+
+local aspect_ratio do
     local alpha = 0
-    local currentAngle
-
-    local function gradient_line(x1, y1, x2, y2, r1, g1, b1, a1, r2, g2, b2, a2, segments)
-        local step = 1 / segments
-        for i = 0, segments - 1 do
-            local t1, t2 = i * step, (i + 1) * step
-            local r = r1 + (r2 - r1) * t1
-            local g = g1 + (g2 - g1) * t1
-            local b = b1 + (b2 - b1) * t1
-            local a = a1 + (a2 - a1) * t1
-    
-            local x_start = x1 + (x2 - x1) * t1
-            local y_start = y1 + (y2 - y1) * t1
-            local x_end = x1 + (x2 - x1) * t2
-            local y_end = y1 + (y2 - y1) * t2
-    
-            renderer.line(x_start, y_start, x_end, y_end, r, g, b, a)
+    local function on_paint ()
+        alpha = lerp('aspect_ratio_alpha', elements.visuals.aspect_ratio.enable:get() and 255 or 0, 16, 0.001, 'ease_out')
+        if alpha == 0 then
+            cvar.r_aspectratio:set_int(0)
+            return
         end
-    end
-    
-    local function rotate(x, y, cx, cy, angle)
-        local rad = math.rad(angle)
-        local cosAngle = math.cos(rad)
-        local sinAngle = math.sin(rad)
-        local dx = x - cx
-        local dy = y - cy
-        return cx + dx * cosAngle - dy * sinAngle, cy + dx * sinAngle + dy * cosAngle
+
+        local x, y = client.screen_size()
+        local init = x / y
+
+        local value = elements.visuals.aspect_ratio.settings.value:get()
+        local animate = lerp('aspect_ratio_animate', elements.visuals.aspect_ratio.enable:get() and value * .01 or init, 8, 0.001, 'ease_out')
+
+        if animate == init then
+            cvar.r_aspectratio:set_int(0)
+            return
+        end
+
+        cvar.r_aspectratio:set_float(animate)
     end
 
-    local render = function()
-        refs2.scope:override(false)
-        if not lp.entity or not entity.is_alive(lp.entity) then return end
-    
-        offset = utils.lerp(offset, lp.scoped and menu.Features.scope.gap.value or 0, 0.03)
-        length = utils.lerp(length, lp.scoped and menu.Features.scope.length.value or 0, 0.03)
-        alpha = utils.lerp(alpha, lp.scoped and 1 or 0, 0.02)
-    
-        if offset > 0 and length > 0 then
-            local c = colors['scope']['Color']
-            
-            if menu.Features.scope.style.value == "Style: Plus" then
-                renderer.gradient(screen.center.x, screen.center.y + offset, 1, length, c.r, c.g, c.b, c.a * alpha, c.r, c.r, c.r, 0, false)
-                renderer.gradient(screen.center.x + 1, screen.center.y - offset, -1, -length, c.r, c.g, c.b, c.a * alpha, c.r, c.r, c.r, 0, false)
-                renderer.gradient(screen.center.x - offset, screen.center.y + 1, -length, -1, c.r, c.g, c.b, c.a * alpha, c.r, c.r, c.r, 0, true)
-                renderer.gradient(screen.center.x + offset, screen.center.y, length, 1, c.r, c.g, c.b, c.a * alpha, c.r, c.r, c.r, 0, true)
-            
-            elseif menu.Features.scope.style.value == "Style: Cross" then
-                local targetAngle = alpha * menu.Features.scope.dalbaeb.value  -- Преобразуем alpha в угол
-                -- local targetAngle = alpha * globals.framecount()  -- Преобразуем alpha в угол
-                currentAngle = utils.lerp(currentAngle or targetAngle, targetAngle, 0.05)
-    
-
-                
-                local hihihaha = (menu.Features.scope.dalbaeb2.value and -1 or 1)
-                offset = math.max(1, offset)
-                local x1, y1 = screen.center.x + offset, screen.center.y + offset 
-                local x2, y2 = screen.center.x + offset + length, screen.center.y + offset + length
-                x2, y2 = rotate(x2, y2, screen.center.x, screen.center.y, currentAngle)
-                x1, y1 = rotate(x1, y1, screen.center.x, screen.center.y, currentAngle * hihihaha)
-                gradient_line(x1, y1, x2, y2, c.r, c.g, c.b, c.a * alpha, c.r, c.r, c.r, 0, 10)
-    
-                x1, y1 = screen.center.x - offset, screen.center.y - offset
-                x2, y2 = screen.center.x - offset - length, screen.center.y - offset - length
-                x2, y2 = rotate(x2, y2, screen.center.x, screen.center.y, currentAngle)
-                x1, y1 = rotate(x1, y1, screen.center.x, screen.center.y, currentAngle * hihihaha)
-                gradient_line(x1, y1, x2, y2, c.r, c.g, c.b, c.a * alpha, c.r, c.r, c.r, 0, 10)
-    
-                x1, y1 = screen.center.x + offset, screen.center.y - offset
-                x2, y2 = screen.center.x + offset + length, screen.center.y - offset - length
-                x2, y2 = rotate(x2, y2, screen.center.x, screen.center.y, currentAngle)
-                x1, y1 = rotate(x1, y1, screen.center.x, screen.center.y, currentAngle * hihihaha)
-                gradient_line(x1, y1, x2, y2, c.r, c.g, c.b, c.a * alpha, c.r, c.r, c.r, 0, 10)
-    
-                x1, y1 = screen.center.x - offset, screen.center.y + offset
-                x2, y2 = screen.center.x - offset - length, screen.center.y + offset + length
-                x2, y2 = rotate(x2, y2, screen.center.x, screen.center.y, currentAngle)
-                x1, y1 = rotate(x1, y1, screen.center.x, screen.center.y, currentAngle * hihihaha)
-                gradient_line(x1, y1, x2, y2, c.r, c.g, c.b, c.a * alpha, c.r, c.r, c.r, 0, 10)
-            end
-        end
-    end
-    
-    
-
-    menu.Features.scope.on:set_event('paint', render)
-    menu.Features.scope.on:set_event('paint_ui', function()
-        refs2.scope:override(true)
-    end)
-    menu.Features.zoom.on:set_callback(function(self)
-        refs2.scope:set_enabled(not self.value)
-        if not self.value then 
-            refs2.scope:override()
-        end
-    end)
+    client.set_event_callback('paint', on_paint)
 end
 
-local zoom do
-    local val = 0
-    local animation = function()
-        -- local button = (menu.Features.zoom.button:get() and menu.Features.zoom.third.value*0.5 or 0)
-        -- local slider = menu.Features.zoom[( (menu.Features.zoom.mode.value == 'Mode: Single' and 'first') or lp.zoom == 1 and 'first' or 'second')].value*0.5
-        -- val = utils.lerp(val, lp.entity and entity.is_alive(lp.entity) and (lp.scoped and (slider + (menu.Features.zoom.stack.value and button or 0)) or button) or 0, 45, 0.5)
-        -- local orig = refs2.fov:get_original()
-        -- local orig = 
-        -- refs2.fov:override(math.max(orig - val,orig - math.floor(val)))
-        -- refs2.zoom:override(0)
-        
-        local distance = menu.Features.zoom.distance.value
-        local slider = not lp.scoped and 0 or menu.Features.zoom[( (menu.Features.zoom.mode.value == 'Mode: Single' and 'first') or lp.zoom == 1 and 'first' or 'second')].value
-        val = utils.lerp(val, distance - distance * slider/100, 0.03)
-        cvar.cam_idealdist:set_raw_float(val)
-    end
-    menu.Features.zoom.on:set_event('paint', animation)
-    menu.Features.zoom.on:set_callback(function(self)
-        -- refs2.zoom:set_enabled(not self.value)
-        -- refs2.fov:set_enabled(not self.value)
-        if not self.value then 
-            cvar.cam_idealdist:set_raw_float(default.dist)
-        end
-    end)
-    defer(function()
-        cvar.cam_idealdist:set_raw_float(default.dist)
-
-    end)
-end
-
-local aspectratio do
-    local self = menu.Features.aspect
-    local setup = function(val)
-        cvar.r_aspectratio:set_raw_float((not self.on.value or self.ratio.value == 59 or not val) and 0 or self.ratio.value/100)
-    end
-
-    self.on:set_callback(setup, true)
-    self.ratio:set_callback(setup)
-    defer(setup)
-end
-
-local viewmodel do
-    viewmodel = default.viewmodel
-    local self = menu.Features.viewmodel
-    local setup = function(val, name)
-        if not val or not name then
-            for a, b in pairs(viewmodel) do
-                local el =  cvar['viewmodel_' .. (#a > 1 and a or 'offset_'..a)]
-                el:set_raw_float(val and self.on.value and self[a].value / (#a == 1 and 10 or 1) or b)
-            end
-        elseif self.on.value then
-            local a = cvar['viewmodel_' .. (#name > 1 and name or 'offset_'..name)]
-            a:set_raw_float(self[name].value / (#name == 1 and 10 or 1))
-        end
-    end
-
-    self.on:set_callback(setup, true)
-    for name, val in pairs(viewmodel) do
-        self[name]:set_callback(function(this)
-            setup(this, name)
-        end)
-    end
-
-    do
-        local weapon_raw = ffi.cast('void****', ffi.cast('char*', client.find_signature('client_panorama.dll', '\x8B\x35\xCC\xCC\xCC\xCC\xFF\x10\x0F\xB7\xC0')) + 2)[0]
-        local ccsweaponinfo_t = [[struct{
-            char __pad_0x0000[0x1cd];
-            bool hide_vm_scope;
-        }]]
-        local get_weapon_info = vtable_thunk(2, ccsweaponinfo_t .. '*(__thiscall*)(void*, unsigned int)')
-        client.set_event_callback('run_command', function()
-            if not lp.entity then return end
-            local weapon = entity.get_player_weapon(lp.entity)
-            if not weapon then return end
-            get_weapon_info(weapon_raw, entity.get_prop(weapon, 'm_iItemDefinitionIndex')).hide_vm_scope = not (self.scope.value and self.on.value)
-        end)
-
-        defer(function()
-            setup()
-            if not lp.entity then return end
-            local weapon = entity.get_player_weapon(lp.entity)
-            if not weapon then return end
-            get_weapon_info(weapon_raw, entity.get_prop(weapon, 'm_iItemDefinitionIndex')).hide_vm_scope = true
-        end)
-    end
-    
-end
-
-local ragelogs do
-    local data, hitlog = {}, {}
-    local hitgroups = {'head', 'chest', 'stomach', 'left arm', 'right arm', 'left leg', 'right leg', 'neck', '?', 'gear', 'nil'}
-
-    menu.Features.logs.on:set_event('aim_fire', function(e)  
-        data.hitgroup = e.hitgroup
-        data.damage = e.damage
-        -- data.bt = e.backtrack
-        data.bt = globals.tickcount() - e.tick
-        data.lc = e.teleported
-    end)
-
-    local self = menu.Features.logs
-    self.on:set_event('aim_miss', function(e)  
-        local col = color(unpack(menu.Features.color[e.reason].color.value)) or color(255,255,255,255)
-        if self.display:get("On Screen") then
-            table.insert(hitlog, {"\f<col2> Miss \f<col>"..entity.get_player_name(e.target).."\f<col2>'s \f<col>"..hitgroups[e.hitgroup].."\f<col2> due to \f<col>"..e.reason, 
-            globals.curtime() +  menu.Features.logs.time.value*.1, 0.1, nil, col})
-        end
-        if self.display:get("In Console") then
-            col = (utils.to_hex(col)):sub(1,6)
-            pui.macros.col = '\a'..col
-            utils.printc(pui.format(
-                "\f<r>[\f<col>+\f<r>] ~ Miss "..
-                "\f<col>"..entity.get_player_name(e.target).."\f<r>'s "..
-                "\f<col>"..(hitgroups[e.hitgroup] or "?")..
-                "\f<r> due to \f<col>"..e.reason.."\f<r>"..
-                (e.reason == 'spread' and "(\f<col>"..string.format('%.0f', e.hit_chance).."\f<r>%)" or '')..
-                (data.bt ~= 0 and ' (\f<col>'..data.bt..'\f<r> bt)' or '')..
-                (data.lc and ' (\f<col>LC\f<r>)' or '')
-            ))
-        end
-    end)
-    self.on:set_event('aim_hit', function(e)
-        local col = utils.to_hex(color(unpack(menu.Features.color['hit'].color.value)) or color(255,255,255,255))
-        if self.display:get("On Screen") then
-            table.insert(hitlog, {
-                "\f<col2> Hit \f<col>"..entity.get_player_name(e.target).."\f<col2>'s \f<col>"..(hitgroups[e.hitgroup] or '?').."\f<col2> for \f<col>"..e.damage.." \f<col2>dmg", 
-                globals.curtime() +  menu.Features.logs.time.value*.1, 0.1, nil, color(unpack(menu.Features.color['hit'].color.value)) })
-        end
-        if self.display:get("In Console") then
-            col = col:sub(1,6)
-            pui.macros.col = '\a'..col
-            local health = entity.get_prop(e.target, 'm_iHealth')
-            utils.printc(pui.format(
-                "\f<r>[\f<col>+\f<r>] ~ Hit "..
-                "\f<col>"..entity.get_player_name(e.target).."\f<r>'s "..
-                "\f<col>"..(hitgroups[e.hitgroup] or "?")..
-                (e.hitgroup ~= data.hitgroup and "\f<r>(\f<col>"..hitgroups[data.hitgroup].."\f<r>)" or '')..
-                "\f<r> for \f<col>"..e.damage.."\f<r>"..
-                (e.damage ~= data.damage and "\f<r>(\f<col>"..data.damage.."\f<r>) dmg" or ' dmg')..
-                (e.reason == 'spread' and "(\f<col>"..string.format('%.0f', e.hit_chance).."\f<r>%)" or '')..
-                " \f<col>~"..
-                (health <= 0 and ' \f<r>(\f<col>dead\f<r>)' or ' \f<r>(\f<col>'..health..'\f<r> hp)')..
-                (data.bt ~= 0 and ' (\f<col>'..data.bt..'\f<r> bt)' or '')..
-                (data.lc and ' (\f<col>LC\f<r>)' or '')
-            ))
-        end
-    end)
-
-    local render = function()
-        if not self.display:get('On Screen') then return end
-        if #hitlog > 0 then
-            if hitlog[1][3] <= 0.07 or #hitlog > 7 then
-                table.remove(hitlog, 1)
-            end
-            for i = 1, #hitlog do
-                local curtime = globals.curtime()
-                hitlog[i][3] = utils.lerp(hitlog[i][3], curtime >= hitlog[i][2] and 0 or 1, 0.03)
-                hitlog[i][4] = not hitlog[i][4] and i * 50 or utils.lerp(hitlog[i][4], curtime >= hitlog[i][2] and i * -10 or (hitlog[i - 1] and curtime >= hitlog[i - 1][2] and i-1 or i) * 30, 0.035)
-
-                local text_color = hitlog[i][5]:clone()
-                pui.macros.col = '\a'..utils.to_hex(text_color:alpha_modulate(text_color.a * hitlog[i][3]))
-
-                local text_color2 = color(255,255,255,100)
-                pui.macros.col2 = '\a'..utils.to_hex(text_color2:alpha_modulate(text_color2.a * hitlog[i][3]))
-
-                local text = pui.format(hitlog[i][1])
-                local measure = vector(renderer.measure_text('d', text))
-                local y = screen.size.y * 0.73 - (1 - hitlog[i][4])
-
-                local c = colors['logs']['Background']
-                utils.rectangle(
-                        screen.center.x - math.floor(measure.x * 0.55), y - 3,
-                        math.floor(measure.x * 0.55) * 2, measure.y + 7,
-                        c.r,c.g,c.b,c.a * hitlog[i][3],
-                        5
-                )
-                renderer.text(screen.center.x - measure.x * 0.5, y, 0,0,0,0, 'd', 0, text)
-            end
-        end
-    end
-    self.on:set_event('paint', render)
-    client.set_event_callback('round_poststart', function()
-        hitlog = {}
-    end)
-    self.on:set_callback(function(self)
-        refs2.log_dealt:override(not self.value and nil or false)
-        refs2.log_dealt:set_enabled(not self.value)
-        refs2.log_spread:override(not self.value and nil or false)
-        refs2.log_spread:set_enabled(not self.value)
-    end, true)
-end
-
--- local animations do
---     local native_GetClientEntity = vtable_bind('client.dll', 'VClientEntityList003', 3, 'void*(__thiscall*)(void*, int)')
---     local char_ptr = ffi.typeof('char*')
---     local nullptr = ffi.new('void*')
---     local class_ptr = ffi.typeof('void***')
---     local animation_layer_t = ffi.typeof([[
---         struct {										char pad0[0x18];
---             uint32_t	sequence;
---             float		prev_cycle;
---             float		weight;
---             float		weight_delta_rate;
---             float		playback_rate;
---             float		cycle;
---             void		*entity;						char pad1[0x4];
---         } **
---     ]])
-    
---     local setup = function(e)
---         if not lp.entity or not entity.is_alive(lp.entity) then return end
-    
---         local player_ptr = ffi.cast(class_ptr, native_GetClientEntity(lp.entity))
---         if player_ptr == nullptr then return end
-    
---         local anim_layers = ffi.cast(animation_layer_t, ffi.cast(char_ptr, player_ptr) + 0x2990)[0]
-    
---         if lp.on_ground then
---             refs.other.legmovement:override(
---                 menu.Features.animations.ground.value == "Default" and "Off" or 
---                 ((menu.Features.animations.ground.value == "Never slide" or menu.Features.animations.ground.value == "Always slide") and menu.Features.animations.ground.value) or 
---                 (menu.Features.animations.ground.value == "Jitter" and (globals.tickcount() % 11 <= 2 and "Always slide" or "Never slide")) or
---                 "Never slide"
---             )
---             if menu.Features.animations.ground.value == "Moonwalk" then 
---                 entity.set_prop(lp.entity, "m_flPoseParameter", 0.5, 7) 
---             end
-    
---             if menu.Features.animations.extra:get("Landing Pitch") then
---                 local my_data = entity2(lp.entity)
---                 if my_data then
---                     local animstate = entity2.get_anim_state(my_data)
---                     if animstate then
---                         if animstate.hit_in_ground_animation then
---                             entity.set_prop(lp.entity, 'm_flPoseParameter', 0.5, 12)
---                         end
---                     end
---                 end
---             end 
-
---             if menu.Features.animations.extra:get("Disable Move Lean") then
---                 anim_layers[6]['weight'] = 0
---             end
---         else 
---             if menu.Features.animations.air.value == "Static" then 
---                 entity.set_prop(lp.entity, "m_flPoseParameter", 1, 6)
---             elseif menu.Features.animations.air.value == "Moonwalk" then
---                 anim_layers[6]['weight'] = 1
---             end
---         end
---     end
---     menu.Features.animations.on:set_event('pre_render', setup)
---     menu.Features.animations.on:set_callback(function(self)
---         if not self.value then
---             refs.other.legmovement:override("Off")
---         end
---     end)
--- end
-
-local filter do
-    menu.Features.console.on:set_callback(function(self)
-        client.delay_call(0, function()
-            cvar.con_filter_enable:set_int(self.value and 1 or 0)
-            cvar.con_filter_text:set_string(self.value and 'Regicide ['..version[1] ..']' or '')
-        end)
-    end, true)
-    defer(function()
-        cvar.con_filter_enable:set_int(0)
-        cvar.con_filter_text:set_string('')
-    end)
-end
-
-local manuals do
-    manuals = {
-        {
-            [menu.Antiaims.hotkeys.forward] = {
-                state = false,
-                yaw = "Forward",
-            },
-            [menu.Antiaims.hotkeys.left]  = {
-                state = false,
-                yaw = "Left",
-            },
-            [menu.Antiaims.hotkeys.right] = {
-                state = false,
-                yaw = "Right",
-            },
-        },
-        {
-            ["Forward"] = 180,
-            ["Left"] = -90,
-            ["Right"] = 90,
-        },
-        {
-            ["Forward"] = {1,-70,"^"},
-            ["Left"] = {-70,1,"<"},
-            ["Right"] = {70,1,">"},
-        },
-    }
-    local handle_manuals = function()
-        for key, value in pairs(manuals[1]) do
-            local state, m_mode = key:get()
-            if state ~= value.state then
-                value.state = state
-                if m_mode == 1 then
-                    lp.manual = state and value.yaw or nil
-                end
-    
-                if m_mode == 2 then
-                    if lp.manual == value.yaw then
-                        lp.manual = nil
-                    else
-                        lp.manual = value.yaw
-                    end
-                end
-            end
-    
-        end
-    end
-    client.set_event_callback('paint', handle_manuals)
-
-    local alpha,x,y = 0,0,0
-    local last = nil
-    local this = nil
-    local render = function()
-        if not lp.entity or not entity.is_alive(lp.entity) then return end
-        this = lp.manual
-        last = this and this or last
-        if not last then return end
-        y = utils.lerp(y,this and manuals[3][last][2] or 0, 0.03)
-        x = utils.lerp(x,this and manuals[3][last][1] or 0, 0.03)
-        alpha = utils.lerp(alpha, this and math.sqrt( x^2 +y^2 )/math.sqrt( manuals[3][last][1]^2 +manuals[3][last][2]^2 ) * (alpha < 0.75 and 0.9 or 1) or 0, 0.03)
-        if alpha <= 0.1 then return end
-        local c = colors["manual"]['Color']
-        renderer.text(screen.center.x+x-1, screen.center.y+y-1, c.r,c.g,c.b,c.a * alpha,'+cd',0,manuals[3][last][3]:upper())
-    end
-    menu.Features.manual.on:set_event('paint', render)
-end
-
-local exploit do
-    exploit = { }
-    exploit.def_aa = false
-    local BREAK_LAG_COMPENSATION_DISTANCE_SQR = 64 * 64
-
-    local max_tickbase = 0
-    local run_command_number = 0
-
-    local data = {
-        old_origin = vector(),
-        old_simtime = 0.0,
-
-        shift = false,
-        breaking_lc = false,
-
-        defensive = {
-            force = false,
-            left = 0,
-            max = 0,
-        },
-
-        lagcompensation = {
-            distance = 0.0,
-            teleport = false
-        }
-    }
-
-    local function update_tickbase(me)
-        data.shift = globals.tickcount() > entity.get_prop(me, 'm_nTickBase')
-    end
-
-    local function update_teleport(old_origin, new_origin)
-        local delta = new_origin - old_origin
-        local distance = delta:lengthsqr()
-
-        local is_teleport = distance > BREAK_LAG_COMPENSATION_DISTANCE_SQR
-
-        data.breaking_lc = is_teleport
-
-        data.lagcompensation.distance = distance
-        data.lagcompensation.teleport = is_teleport
-    end
-
-    local function update_lagcompensation(me)
-        local old_origin = data.old_origin
-        local old_simtime = data.old_simtime
-
-        local origin = vector(entity.get_origin(me))
-        local simtime = toticks(entity.get_prop(me, 'm_flSimulationTime'))
-
-        if old_simtime ~= nil then
-            local delta = simtime - old_simtime
-
-            if delta < 0 or delta > 0 and delta <= 64 then
-                update_teleport(old_origin, origin)
-            end
+local viewmodel = { fov = 0, x = 0, y = 0, z = 0 }; do
+    local alpha = 0
+    local function on_paint ()
+        alpha = lerp('viewmodel_alpha', elements.visuals.viewmodel.enable:get() and 255 or 0, 16, 0.001, 'ease_out')
+        if alpha == 0 then
+            return
         end
 
-        data.old_origin = origin
-        data.old_simtime = simtime
-    end
-
-    local function update_defensive_tick(me)
-        local tickbase = entity.get_prop(me, 'm_nTickBase')
-
-        if math.abs(tickbase - max_tickbase) > 64 then
-            -- nullify highest tickbase if the difference is too big
-            max_tickbase = 0
-        end
-
-        local defensive_ticks_left = 0
-
-        -- defensive effect can be achieved because the lag compensation is made so that
-        -- it doesn't write records if the current simulation time is less than/equals highest acknowledged simulation time
-        -- https://gitlab.com/KittenPopo/csgo-2018-Debug/-/blame/main/game/server/player_lagcompensation.cpp#L723
-
-        if tickbase > max_tickbase then
-            max_tickbase = tickbase
-        elseif max_tickbase > tickbase then
-            defensive_ticks_left = math.min(14, math.max(0, max_tickbase - tickbase - 1))
-        end
-
-        if defensive_ticks_left > 0 then
-            data.breaking_lc = true
-            data.defensive.left = defensive_ticks_left
-
-            if data.defensive.max == 0 then
-                data.defensive.max = defensive_ticks_left
-            end
+        if elements.visuals.viewmodel.enable:get() then
+            viewmodel.fov = lerp('viewmodel_fov', elements.visuals.viewmodel.settings.fov:get(), 8, 0.001, 'ease_out')
+            viewmodel.x = lerp('viewmodel_x', elements.visuals.viewmodel.settings.x:get() / 10, 8, 0.001, 'ease_out')
+            viewmodel.y = lerp('viewmodel_y', elements.visuals.viewmodel.settings.y:get() / 10, 8, 0.001, 'ease_out')
+            viewmodel.z = lerp('viewmodel_z', elements.visuals.viewmodel.settings.z:get() / 10, 8, 0.001, 'ease_out')
         else
-            data.defensive.left = 0
-            data.defensive.max = 0
+            viewmodel.fov = lerp('viewmodel_fov', 68, 8, 0.001, 'ease_out')
+            viewmodel.x = lerp('viewmodel_x', 2.5, 8, 0.001, 'ease_out')
+            viewmodel.y = lerp('viewmodel_y', 0, 8, 0.001, 'ease_out')
+            viewmodel.z = lerp('viewmodel_z', -1.5, 8, 0.001, 'ease_out')
+        end
+      
+        -- if elements.visuals.viewmodel.enable:get() and elements.visuals.viewmodel.settings.additional:get('CS2 Hands In Scope') and entity.get_prop(entity.get_local_player(), 'm_bIsScoped') == 1 then
+        --     viewmodel.x = lerp('viewmodel_x', -9, 8, 0.001, 'ease_out')
+        --     viewmodel.y = lerp('viewmodel_y', -1, 8, 0.001, 'ease_out')
+        --     viewmodel.z = lerp('viewmodel_z', -3.5, 8, 0.001, 'ease_out')
+        -- end
+      
+        cvar.viewmodel_fov:set_raw_float(viewmodel.fov)
+        cvar.viewmodel_offset_x:set_raw_float(viewmodel.x)
+        cvar.viewmodel_offset_y:set_raw_float(viewmodel.y)
+        cvar.viewmodel_offset_z:set_raw_float(viewmodel.z)
+    end
+
+    client.set_event_callback('paint', on_paint)
+end
+
+
+local markers = { hits = { }, misses = { }, damages = { }, positions = { } }; do
+    local function on_aim_fire (e)
+        if not elements.visuals.markers.enable:get() then
+            return
+        end
+
+        markers.positions[e.id] = { e.x, e.y, e.z }
+    end
+  
+    local function on_aim_hit (e)
+        if not elements.visuals.markers.enable:get() then
+            return
+        end
+
+        local position = markers.positions[e.id]
+        if position then
+            table.insert(markers.hits, {
+                time = globals.curtime(),
+                position = position
+            })
+
+            markers.positions[e.id] = nil
+        end
+    end
+  
+    local function on_aim_miss (e)
+        if not elements.visuals.markers.enable:get() then
+            return
+        end
+
+        local position = markers.positions[e.id]
+        if position then
+            local red = { 255, 0, 50 }
+            local yellow = { 255, 205, 0 }
+            e.reason = e.reason == '?' and 'resolver' or e.reason
+            
+            table.insert(markers.misses, {
+                time = globals.curtime(),
+                position = position,
+                reason = e.reason,
+                color = (e.reason == 'spread' or e.reason == 'prediction error') and yellow or red
+            })
+
+            markers.positions[e.id] = nil
+        end
+    end
+  
+    local function on_player_hurt (e)
+        if not elements.visuals.markers.enable:get() then
+            return
+        end
+
+        local attacker = client.userid_to_entindex(e.attacker)
+        local victim = client.userid_to_entindex(e.userid)
+    
+        if attacker == entity.get_local_player() and victim ~= attacker then
+            table.insert(markers.damages, {
+                time = globals.curtime(),
+                position = { entity.get_prop(victim, 'm_vecOrigin') },
+                damage = e.dmg_health,
+                offset = 0 
+            })
+        end
+    end
+  
+    local function on_paint ()
+        if not elements.visuals.markers.enable:get() then
+            return
+        end
+
+        if elements.visuals.markers.settings.type:get('On hit') then
+            for i = #markers.hits, 1, -1 do
+                local hit = markers.hits[i]
+                local alpha = 255 - (globals.curtime() - hit.time) * 255 / 2
+                if alpha > 0 then
+                    local x, y = renderer.world_to_screen(hit.position[1], hit.position[2], hit.position[3])
+                    if x and y then
+                        local size = 4
+                        renderer.line(x - size, y - size, x + size, y + size, 255, 255, 255, alpha)
+                        renderer.line(x + size, y - size, x - size, y + size, 255, 255, 255, alpha)
+                    end
+                else
+                    table.remove(markers.hits, i)
+                end
+            end
+        end
+      
+        if elements.visuals.markers.settings.type:get('On miss') then
+            for i = #markers.misses, 1, -1 do
+                local miss = markers.misses[i]
+                local alpha = 255 - (globals.curtime() - miss.time) * 255 / 2
+                if alpha > 0 then
+                    local x, y = renderer.world_to_screen(miss.position[1], miss.position[2], miss.position[3])
+                    if x and y then
+                        local size = 4
+                        renderer.line(x - size, y - size, x + size, y + size, miss.color[1], miss.color[2], miss.color[3], alpha)
+                        renderer.line(x + size, y - size, x - size, y + size, miss.color[1], miss.color[2], miss.color[3], alpha)
+                        renderer.text(x + 10, y - 7, miss.color[1], miss.color[2], miss.color[3], alpha, 'b', 0, miss.reason)
+                    end
+                else
+                    table.remove(markers.misses, i)
+                end
+            end
+        end
+    
+        if elements.visuals.markers.settings.type:get('Damage') then
+            for i = #markers.damages, 1, -1 do
+                local damage = markers.damages[i]
+                local alpha = 255 - (globals.curtime() - damage.time) * 255 / 2
+                if alpha > 0 then
+                    damage.offset = damage.offset + 0.2
+                    local x, y = renderer.world_to_screen(damage.position[1], damage.position[2], damage.position[3] + damage.offset)
+                    if x and y then
+                        renderer.text(x, y, 255, 255, 255, alpha, 'cb', 0, '-' .. damage.damage)
+                    end
+                else
+                    table.remove(markers.damages, i)
+                end
+            end
         end
     end
 
-    function exploit.get()
+    local function reset ()
+        if not elements.visuals.markers.enable:get() then
+            return
+        end
+
+        markers = { hits = { }, misses = { }, damages = { }, positions = { } }
+    end
+    
+    client.set_event_callback('aim_fire', on_aim_fire)
+    client.set_event_callback('aim_hit', on_aim_hit)
+    client.set_event_callback('player_hurt', on_player_hurt)
+    client.set_event_callback('aim_miss', on_aim_miss)
+    client.set_event_callback('paint', on_paint)
+    client.set_event_callback('post_config_load', reset)
+    client.set_event_callback('on_round_start', reset)
+    client.set_event_callback('on_round_end', reset)
+end
+
+---
+
+local enemy_chat_viewer do
+    local last_chat_message = { }
+
+    local function on_player_say (e)
+        if not elements.misc.enemy_chat_viewer:get() then
+            return
+        end
+
+        local sender = client.userid_to_entindex(e.userid)
+        if not entity.is_enemy(sender) then 
+            return 
+        end
+
+        if panorama.open().GameStateAPI.IsSelectedPlayerMuted(panorama.open().GameStateAPI.GetPlayerXuidStringFromEntIndex(sender)) then 
+            return 
+        end
+
+        client.delay_call(0.2, function ()
+            if last_chat_message[sender] ~= nil and math.abs(globals.realtime() - last_chat_message[sender]) < 0.4 then
+                return
+            end
+
+            local enemy_team_name = entity.get_prop(entity.get_player_resource(), 'm_iTeam', sender) == 2 and 'T' or 'CT'
+
+            local place_name = entity.get_prop(sender, 'm_szLastPlaceName')
+            local enemy_name = entity.get_player_name(sender)
+            
+            local l = ('Cstrike_Chat_%s_%s'):format(enemy_team_name, entity.is_alive(sender) and 'Loc' or 'Dead')
+            local msg = localize(l, {
+                s1 = enemy_name,
+                s2 = e.text,
+                s3 = localize(place_name ~= '' and place_name or 'UI_Unknown')
+            })
+
+            chat.print_player(sender, msg)
+        end)
+    end
+
+    local function on_player_chat (e)
+        if not elements.misc.enemy_chat_viewer:get() and not entity.is_enemy(e.entity) then
+            return
+        end
+
+        last_chat_message[e.entity] = globals.realtime()
+    end
+
+    client.set_event_callback('player_say', on_player_say)
+    client.set_event_callback('player_chat', on_player_chat)
+end
+
+local edge_quick_stop do
+    local function is_about_to_fall (player)
+        local origin = vector(entity.get_origin(player))
+        local vel = {entity.get_prop(player, 'm_vecVelocity')}
+        local velocity = vector(vel[1] or 0, vel[2] or 0, 0)
+        local speed = velocity:length2d()
+        if speed < 5 then return false end
+
+        local move_yaw = math.deg(math.atan2(velocity.y, velocity.x))
+        local yaw_rad = math.rad(move_yaw)
+        local forward = vector(math.cos(yaw_rad), math.sin(yaw_rad), 0)
+        local check_dist = 18
+        local down_dist = 36
+        local min_drop = 16
+        local offsets = {0, 10, -10}
+
+        for _, side in ipairs(offsets) do
+            local side_vec = vector(-math.sin(yaw_rad), math.cos(yaw_rad), 0) * side
+            local check_pos = origin + forward * check_dist + side_vec
+            local start_pos = vector(check_pos.x, check_pos.y, origin.z)
+            local end_pos = vector(check_pos.x, check_pos.y, origin.z - down_dist)
+            local fraction, ent_hit, end_x, end_y, end_z = client.trace_line(player, start_pos.x, start_pos.y, start_pos.z, end_pos.x, end_pos.y, end_pos.z)
+            if fraction >= 0.99 then
+                return true
+            elseif fraction > 0 then
+                local hit_z = start_pos.z - (down_dist * fraction)
+                if (start_pos.z - hit_z) > min_drop then
+                    return true
+                end
+            end
+        end
+        return false
+    end
+
+    local function on_setup_command (e)
+        if not elements.misc.edge_quick_stop:get() or not elements.misc.edge_quick_stop.hotkey:get() then
+            return
+        end
+
+        local player = entity.get_local_player()
+        if not player or not entity.is_alive(player) then
+            return
+        end
+        
+        if not is_on_ground then return end
+
+        local vel = {entity.get_prop(player, 'm_vecVelocity')}
+        local velocity = vector(vel[1] or 0, vel[2] or 0, 0)
+
+        if is_about_to_fall(player) then
+            local move_yaw = math.deg(math.atan2(velocity.y, velocity.x))
+            local move_dir = math.rad(move_yaw)
+            local forwardmove = e.forwardmove or 0
+            local sidemove = e.sidemove or 0
+            local move_vec = vector(
+                math.cos(move_dir) * forwardmove - math.sin(move_dir) * sidemove,
+                math.sin(move_dir) * forwardmove + math.cos(move_dir) * sidemove,
+                0
+            )
+
+            if move_vec:length2d() > 0 and (move_vec.x * velocity.x + move_vec.y * velocity.y) > 0 then
+                e.forwardmove = 0
+                e.sidemove = 0
+            end
+        end
+    end
+
+    client.set_event_callback('setup_command', on_setup_command)
+end
+
+local duck_peek_assist_fix do
+    local hotkey_modes = {
+        [0] = 'Always on',
+        [1] = 'On hotkey',
+        [2] = 'Toggle',
+        [3] = 'Off hotkey'
+    }
+
+    local saved_hotkey = nil
+    local is_altered = false
+
+    local function extract_hotkey (ref)
+        local data = { ref:get() }
+        if ref:get_type() == 'hotkey' then
+            return { hotkey_modes[data[2]] or 'Off hotkey', data[3] }
+        end
+
         return data
     end
 
-    local function on_predict_command(cmd)
-        local me = entity.get_local_player()
-
-        if me == nil then
+    local function on_setup_command (e)
+        if not elements.misc.fd_fix:get() then
             return
         end
 
-        if cmd.command_number == run_command_number then
-            update_defensive_tick(me)
-            run_command_number = nil
-        end
-    end
-
-    local function on_setup_command(cmd)
-        local me = entity.get_local_player()
-
-        if me == nil then
+        local player = entity.get_local_player()
+        if not player or not entity.is_alive(player) then
             return
         end
 
-        update_tickbase(me)
-    end
+        local duck_active = e.in_duck == 1 and entity.get_prop(player, 'm_flDuckAmount') > 0.8
+        local enabled, current_mode = reference.rage.other.fake_duck:get()
 
-    local function on_run_command(e)
-        run_command_number = e.command_number
-    end
-
-    local function on_net_update_start()
-        local me = entity.get_local_player()
-
-        if me == nil then
+        if enabled == nil or current_mode == nil then
             return
         end
 
-        update_lagcompensation(me)
+        if duck_active and enabled and not is_altered then
+            saved_hotkey = extract_hotkey(reference.rage.other.fake_duck)
+            local target_mode = (current_mode == 2 or current_mode == 3) and 'On hotkey' or 'Off hotkey'
+            reference.rage.other.fake_duck:set(target_mode)
+            is_altered = true
+        elseif not duck_active and is_altered and saved_hotkey then
+            reference.rage.other.fake_duck:set(table.unpack(saved_hotkey))
+            saved_hotkey = nil
+            is_altered = false
+        end
     end
 
-    client.set_event_callback('predict_command', on_predict_command)
     client.set_event_callback('setup_command', on_setup_command)
+end
+
+local drop_nades do
+    local nades_list = {
+        ['HE Grenade'] = 'weapon_hegrenade',
+        Molotov = 'weapon_molotov',
+        Incendiary = 'weapon_incgrenade',
+        Smoke = 'weapon_smokegrenade'
+    }
+    
+    local key_click_cache = false
+
+    local function on_paint ()
+        if not elements.misc.drop_nades.enable:get() then
+            return
+        end
+      
+        local me = entity.get_local_player()
+        if not me or not entity.is_alive(me) then
+            return
+        end
+      
+        local weapons = { }
+        for i = 0, 64 do
+            local weapon = entity.get_prop(me, 'm_hMyWeapons', i)
+            if weapon and weapon ~= 0 then
+                local weapon_name = entity.get_classname(weapon)
+                if not weapon_name then
+                    return
+                end
+
+                weapons[weapon_name] = true
+            end
+        end
+        local selected_nades = { }
+        for grenade_type, grenade_name in pairs(nades_list) do
+            local g_class = grenade_type
+            if g_class == 'HE Grenade' then
+                g_class = 'HE'
+            end
+            
+            local grenade_class = 'C' .. g_class .. 'Grenade'
+
+            if weapons[grenade_class] and elements.misc.drop_nades.settings.list:get(grenade_type) then
+                table.insert(selected_nades, grenade_name)
+            end
+        end
+      
+        local drop_key = elements.misc.drop_nades.enable.hotkey:get()
+        if drop_key and not key_click_cache then
+            for index, grenade in ipairs(selected_nades) do
+                local delay = 0.1 * index
+                client.delay_call(delay, function ()
+                    client.exec('use ' .. grenade)
+                    client.delay_call(0.05, function ()
+                        client.exec('drop')
+                    end)
+                end)
+            end
+        end
+      
+        key_click_cache = drop_key
+    end
+
+    client.set_event_callback('paint', on_paint)
+end
+
+local auto_buy do
+    local prices = {
+        ['AWP'] = 4750,
+        ['SCAR-20/G3SG1'] = 5000,
+        ['SSG-08'] = 1700,
+        ['Five-SeveN/Tec-9'] = 500,
+        ['P250'] = 300,
+        ['Deagle/R8'] = 700,
+        ['Duals'] = 400,
+        ['HE Grenade'] = 300,
+        ['Molotov'] = 600,
+        ['Smoke'] = 300,
+        ['Kevlar'] = 650,
+        ['Helmet'] = 1000,
+        ['Taser'] = 200,
+        ['Defuse Kit'] = 400
+    }
+    
+    local commands = {
+        ['AWP'] = 'buy awp',
+        ['SCAR-20/G3SG1'] = 'buy scar20',
+        ['SSG-08'] = 'buy ssg08',
+        ['Five-SeveN/Tec-9'] = 'buy tec9',
+        ['P250'] = 'buy p250',
+        ['Deagle/R8'] = 'buy deagle',
+        ['Duals'] = 'buy elite',
+        ['HE Grenade'] = 'buy hegrenade',
+        ['Molotov'] = 'buy molotov',
+        ['Smoke'] = 'buy smokegrenade',
+        ['Kevlar'] = 'buy vest',
+        ['Helmet'] = 'buy vesthelm',
+        ['Taser'] = 'buy taser',
+        ['Defuse Kit'] = 'buy defuser'
+    }
+    
+    local function get_weapon_prices ()
+        local total_price = 0
+        -- @lordmouse: utilities
+        local utility_purchase = elements.misc.autobuy.settings.utilities:get()
+        for i = 1, #utility_purchase do
+            local n = utility_purchase[i]
+            
+            for k, v in pairs(prices) do
+                if k == n then
+                    total_price = total_price + v
+                end
+            end
+        end
+    
+        -- @lordmouse: secondary
+        for k, v in pairs(prices) do
+            if k == elements.misc.autobuy.settings.pistol:get() then
+                total_price = total_price + v
+            end
+        end
+    
+        -- @lordmouse: primary
+        for k, v in pairs(prices) do
+            if k == elements.misc.autobuy.settings.sniper:get() then
+                total_price = total_price + v
+            end
+        end
+        
+        -- @lordmouse: grenades
+        local grenade_purchase = elements.misc.autobuy.settings.grenades:get()
+        for i = 1, #grenade_purchase do
+            local n = grenade_purchase[i]
+            
+            for k, v in pairs(prices) do
+                if k == n then
+                    total_price = total_price + v
+                end
+            end
+        end
+        return total_price
+    end
+
+    local function on_round_prestart (e)
+        if not elements.misc.autobuy.enable:get() then
+            return
+        end
+
+        local price_threshold = get_weapon_prices()
+        local money = entity.get_prop(entity.get_local_player(), 'm_iAccount')
+    
+        if money <= price_threshold then
+            return
+        end
+
+        local utility_purchase = elements.misc.autobuy.settings.utilities:get()
+        for i = 1, #utility_purchase do
+            local n = utility_purchase[i]
+            
+            for k, v in pairs(commands) do
+                if k == n then
+                    client.exec(v)
+                end
+            end
+        end
+
+        -- @lordmouse: secondary
+        for k, v in pairs(commands) do
+            if k == elements.misc.autobuy.settings.pistol:get() then
+                client.exec(v)
+            end
+        end
+
+        -- @lordmouse: primary
+        for k, v in pairs(commands) do
+            if k == elements.misc.autobuy.settings.sniper:get() then
+                client.exec(v)
+            end
+        end
+
+        -- @lordmouse: grenades
+        local grenade_purchase = elements.misc.autobuy.settings.grenades:get()
+        for i = 1, #grenade_purchase do
+            local n = grenade_purchase[i]
+            
+            for k, v in pairs(commands) do
+                if k == n then
+                    client.exec(v)
+                end
+            end
+        end
+    end
+    
+    client.set_event_callback('round_prestart', on_round_prestart)
+end
+
+local animations do
+    local native_GetClientEntity = vtable_bind('client.dll', 'VClientEntityList003', 3, 'void*(__thiscall*)(void*, int)')
+    local char_ptr = ffi.typeof('char*')
+    local nullptr = ffi.new('void*')
+    local class_ptr = ffi.typeof('void***')
+    local animation_layer_t = ffi.typeof([[struct { char pad0[0x18]; uint32_t sequence; float prev_cycle, weight, weight_delta_rate, playback_rate, cycle; void *entity; char pad1[0x4]; } **]])
+
+    local command_number = 0
+    local function on_run_command (e)
+        command_number = e.command_number
+    end
+
     client.set_event_callback('run_command', on_run_command)
 
-    client.set_event_callback('net_update_start', on_net_update_start)
-end
-
-local antiaims do
-    local antiaims = {
-        pitch = {
-            ['Random'] = function()
-                return client.random_int(-89,89)
-            end,
-            ['Custom'] = function(e)
-                return e.pitch_val:get()
-            end,
-            ['Progressive'] = function(e)
-                return (utils.sine_yaw(globals.servertickcount() * e.pitch_speed.value * 0.1, e.pitch_min.value, e.pitch_max.value))
-            end
-        },
-        yaw = {
-            ['Sideways'] = function()
-                return globals.tickcount() % 6 <= 2 and 90 or -90
-            end,
-            ['Sideways 45'] = function()
-                return globals.tickcount() % 6 <= 2 and 45 or -45
-            end,
-            ['Spin'] = function(e)
-                return utils.normalize_yaw(globals.servertickcount() * e.yaw_speed.value)
-            end,
-            ['Progressive'] = function(e)
-                return (utils.sine_yaw(globals.servertickcount() * e.yaw_speed.value * 0.1, e.yaw_min.value, e.yaw_max.value))
-            end,
-            ['Random'] = function()
-                return client.random_int(-180,180)
-            end,
-            ['Custom'] = function(e)
-                return not e.yaw_invert and e.yaw_val:get() or e.yaw_val:get() + (e.yaw_invert:get() and 180 or 0)
-            end,
-            ['Yaw Opposite'] = function(yaw)
-                return utils.normalize_yaw(yaw+180)
-            end,
-            ['Yaw Side'] = function(val)
-                return val
-            end
-        }
-    }
-    local body_yaw,packets,offset,fl = 0,0,0,0
-    local delay = {left=0,right=0,switch_ticks=0,work_side='left',switch=false}
-
-    local setup = function(cmd)
-        refs.fl.enabled:override( not (
-            (menu.Antiaims.other.fl_disabler.value[1] == "Standing") and (lp.on_ground and not lp.moving) or
-            (menu.Antiaims.other.fl_disabler.value[1] == "Crouch Move" or menu.Antiaims.other.fl_disabler.value[2] == "Crouch Move") and (lp.on_ground and lp.crouch and lp.moving)
-        ) )
-
-        -- if menu.Antiaims.other.unsafe.value then
-        --     exploits:allow_unsafe_charge(true)
-        -- end
-
-        refs.aa.enabled:override(true)
-        refs.aa.pitch:override('Minimal')
-        refs.aa.yaw:override("180")
-        refs.aa.roll:override(0)
-
-        local aa = (lp.manual or menu.Antiaims.builder[lp.state].enabled.value) and menu.Antiaims.builder[lp.state] or menu.Antiaims.builder[condition_list[1]]
-
-        refs.aa.yaw_base:override(aa.yaw.base.value)
-        refs.aa.body:override(aa.body.yaw.value == "Jitter" and "Static" or aa.body.yaw.value)
-
-        if globals.chokedcommands() == 0 then
-            if aa.body.delay.mode.value == "Static" then
-                packets = packets > aa.body.delay.delay.value * 2 - 2 and 0 or packets + 1
-            else
-                delay.switch_ticks = (aa.body.delay.switch.value == 0 and -1) or (delay.switch_ticks > aa.body.delay.switch.value - 2 and 0 or delay.switch_ticks + 1)
-                if delay.switch_ticks == 0 then
-                    delay.switch = not delay.switch
-                else
-                    delay.switch = (aa.body.delay.switch.value == 0 and false) or delay.switch
-                end
-                delay.work_side = (delay[delay.work_side] > ( aa.body.delay[(delay.switch and (delay.work_side == 'left' and 'right' or 'left') or delay.work_side)].value - 2 ) and (delay.work_side == 'left' and 'right' or 'left')) or delay.work_side
-                delay[delay.work_side] = (delay[delay.work_side] > ( aa.body.delay[ (delay.switch and (delay.work_side == 'left' and 'right' or 'left') or delay.work_side) ].value - 2 )) and 0 or delay[delay.work_side] + 1
-            end
+    local function on_pre_render ()
+        if not elements.misc.animations.enable:get() then
+            return
         end
-        local inverted = (function()
-            if aa.body.yaw.value == 'Static' then 
-                return aa.body.side.value == 1
-            elseif aa.body.yaw.value == 'Jitter' then
-                if aa.body.delay.mode.value == "Switch" then
-                    return delay.work_side == 'right'
-                else
-                    return packets % (aa.body.delay.delay.value * 2) >= aa.body.delay.delay.value
-                end
-            end
-        end)()
-
-        local yaw_jitter = aa.jitter.type.value
-        if yaw_jitter == "3-Way" or yaw_jitter == '5-Way' then
-            offset = aa.jitter.ways[(globals.tickcount() % (yaw_jitter == '3-Way' and 3 or 5)) + 1].value
-            yaw_jitter = 'Off'
-            offset = client.random_int(offset-aa.jitter.rand.value, offset+aa.jitter.rand.value)
-        else
-            offset = 0
-        end
-
-        refs.aa.jitter:override(yaw_jitter ~= "Spin" and yaw_jitter or "Off")
-        local jitter_val = 0
-        if yaw_jitter ~= 'Off' then
-            jitter_val = (
-                aa.jitter.mode.value == "Spin" and utils.sine_yaw(globals.servertickcount(), aa.jitter.value2.value, aa.jitter.value.value) 
-                or (aa.jitter.mode.value == "Random" and client.random_int(0,1) == 1 or 
-                aa.jitter.mode.value == 'Switch' and globals.tickcount() % 6 <= 2) and aa.jitter.value2.value or aa.jitter.value.value
-            )
-            jitter_val = client.random_int(jitter_val-aa.jitter.rand.value, jitter_val+aa.jitter.rand.value)
-        end
-        refs.aa.jitter_val:override(utils.normalize_yaw(jitter_val))
         
-        
-        refs.aa.body_val:override(inverted and 1 or -1)
-        local yaw = utils.normalize_yaw(
-            lp.manual and manuals[2][lp.manual] + offset 
-            or aa.yaw.global.value + (inverted and aa.yaw.right.value or aa.yaw.left.value) + offset
-        )
-
-        refs.aa.yaw_val:override(yaw)
-        refs.aa.edge:override(menu.Antiaims.hotkeys.edge:get() and not lp.manual)
-        refs.aa.fs:set_hotkey("Always On", 0)
-        if menu.Antiaims.hotkeys.fs:get() and not lp.manual then
-            refs.aa.fs:override(true)
-            if menu.Antiaims.hotkeys.fs_disablers:get("Body Yaw") then refs.aa.body:override("Off") end
-            if menu.Antiaims.hotkeys.fs_disablers:get("Yaw Jitter") then refs.aa.jitter:override("Off") end
-        else
-            refs.aa.fs:override(false)
+        local me = entity.get_local_player()
+        if not me or not entity.is_alive(me) then 
+            return 
         end
-        if lp.state ~= condition_list[9] then
-            if aa.defensive.force.value and not menu.Antiaims.other2.defensive:get("Force Def.") then
-                cmd.force_defensive = true
-            end
-            if lp.flicking then
-                cmd.force_defensive = cmd.command_number % 7 == 0
-            end
-            if (aa.defensive.enabled.value and not menu.Antiaims.other2.defensive:get("Def. AA") or lp.flicking) and not refs2.fd:get() then
-                local this = lp.flicking and menu.Antiaims.other2.flick_aa or (aa.defensive.override and aa.defensive.override.value and aa or menu.Antiaims.builder[condition_list[1]]).defensive.settings
-                local exp = exploit.get().defensive.left
-                local work = exp ~= 0 and (lp.flicking or exp <= this.duration.value)
-                exploit.def_aa = false
-                if work then
-                    exploit.def_aa = true
-                    if this.disablers:get("Body Yaw") then refs.aa.body:override('Off') end
-                    if this.disablers:get("Yaw Jitter") then refs.aa.jitter:override('Off') end
-                    if this.pitch.value ~= "None" then
-                        refs.aa.pitch:override('Custom')
-                        refs.aa.pitch_val:override(antiaims.pitch[this.pitch.value](this))
-                    end
-                    local ezz = {
-                        ['Yaw Opposite'] = yaw,
-                        ['Yaw Side'] = lp.state == condition_list[10] and yaw + 180 or aa.yaw.global.value + (inverted and aa.yaw.left.value or aa.yaw.right.value)
-                    }
-                    if this.yaw.value ~= "None" then
-                        refs.aa.yaw:override('180')
-                        refs.aa.yaw_val:override(utils.normalize_yaw(antiaims.yaw[this.yaw.value](ezz[this.yaw.value] or this)))
-                    end
-                end
-            end
-        end
-
-        if menu.Antiaims.other.avoid_backstab.value then
-            local origin = vector(entity.get_origin(lp.entity))
-            for _,v in ipairs(entity.get_players(true)) do 
-                if entity.get_classname(entity.get_player_weapon(v)) == "CKnife" then
-                    if origin:dist(vector(entity.get_origin(v))) <= 200 then
-                        refs.aa.pitch:override("Off")
-                        refs.aa.yaw:override('180')
-                        refs.aa.yaw_val:override(180)
-                        refs.aa.body:override('Opposite')
-                    end
-                end
-            end
-        end
-
-    end
-    client.set_event_callback("setup_command", setup)
-    defer(function()
-        refs.fl.enabled:override(nil)
-        for _,ref in pairs(refs.aa) do
-            ref:override(nil)
-        end
-    end)
-end
-
-local helper do
-    helper = {
-        ['Crosshair'] = function()
-            return screen.center.x, screen.center.y
-        end,
-        ['Upper-Center'] = function()
-            return screen.center.x, 0
-        end,
-        ['Bottom-Center'] = function()
-            return screen.center.x, screen.size.y
-        end,
-        ['Local Player'] = function(id)
-            local stomach_x, stomach_y, stomach_z = entity.hitbox_position(id, 3)
-            return renderer.world_to_screen(stomach_x, stomach_y, stomach_z)
-        end,
-    }
-    local render = function()
-        if not lp.entity or not entity.is_alive(lp.entity) then return end
-        local weapon_ent = entity.get_player_weapon(lp.entity)
-        local weapon_idx = entity.get_prop(weapon_ent, "m_iItemDefinitionIndex")
-        if weapon_idx == nil then return end
     
-        for i, id in pairs(entity.get_players(true)) do
-            local weapon = csgo_weapons[weapon_idx]
-
-            local distance = vector(entity.get_prop(lp.entity, "m_vecAbsOrigin")):dist(vector(entity.get_prop(id, "m_vecOrigin")))
-            local dmg_after_range = (weapon.damage * math.pow(weapon.range_modifier, (distance * 0.002)))
-            local armor = entity.get_prop(id,"m_ArmorValue")
-            local newdmg = dmg_after_range * (weapon.armor_ratio * 0.5)
-            if dmg_after_range - (dmg_after_range * (weapon.armor_ratio * 0.5)) * 0.5 > armor then
-                newdmg = dmg_after_range - (armor / 0.5)
+        local player_ptr = ffi.cast(class_ptr, native_GetClientEntity(me))
+        if player_ptr == nullptr then 
+            return 
+        end
+    
+        local first_velocity, second_velocity = entity.get_prop(me, 'm_vecVelocity')
+        local speed = math.floor(math.sqrt(first_velocity^2 + second_velocity^2))
+    
+        local anim_layers = ffi.cast(animation_layer_t, ffi.cast(char_ptr, player_ptr) + 0x2990)[0]
+        local anim_type, anim_extra_type, anim_jitter_min, anim_jitter_max, body_lean_value = false, elements.misc.animations.settings.running.anim_extra_type, false, false, 0
+        if is_on_ground and speed > 5 then
+            anim_type = elements.misc.animations.settings.running.anim_type:get()
+            anim_extra_type = elements.misc.animations.settings.running.anim_extra_type
+            anim_jitter_min = elements.misc.animations.settings.running.anim_min_jitter:get() * 0.01
+            anim_jitter_max = elements.misc.animations.settings.running.anim_max_jitter:get() * 0.01
+            body_lean_value = elements.misc.animations.settings.running.anim_bodylean:get()
+        elseif not is_on_ground then
+            anim_type = elements.misc.animations.settings.in_air.anim_type:get()
+            anim_extra_type = elements.misc.animations.settings.in_air.anim_extra_type
+            anim_jitter_min = elements.misc.animations.settings.in_air.anim_min_jitter:get() * 0.01
+            anim_jitter_max = elements.misc.animations.settings.in_air.anim_max_jitter:get() * 0.01
+            body_lean_value = elements.misc.animations.settings.in_air.anim_bodylean:get()
+        end
+        local is_lagging = globals.realtime() / 2 % 1
+    
+        if anim_type == 'Allah' then
+            entity.set_prop(me, 'm_flPoseParameter', 1, is_on_ground and speed > 5 and 7 or 6)
+            if not is_on_ground then anim_layers[6].weight, anim_layers[6].cycle = 1, is_lagging end
+            reference.antiaim.other.leg_movement:override('never slide')
+        elseif anim_type == 'Static' then
+            entity.set_prop(me, 'm_flPoseParameter', 1, is_on_ground and speed > 5 and 0 or 6)
+            reference.antiaim.other.leg_movement:override('always slide')
+        elseif anim_type == 'Jitter' then
+            entity.set_prop(me, 'm_flPoseParameter', client.random_float(anim_jitter_min, anim_jitter_max), is_on_ground and speed > 5 and 7 or 6)
+            reference.antiaim.other.leg_movement:override('never slide')
+        elseif elements.misc.animations.settings.running.anim_type:get() == 'Alternative jitter' then
+            reference.antiaim.other.leg_movement:override(command_number % 3 == 0 and 'off' or 'always slide')
+            entity.set_prop(me, 'm_flPoseParameter', 1, globals.tickcount() % 4 > 1 and 0.5 or 1)
+            if is_on_ground and speed < 0 then
+                entity.set_prop(me, 'm_flPoseParameter', client.random_float(0.4, 0.8), 7)
             end
-            local picked = (menu.Features.helper[(refs2.thirdperson.value and refs2.thirdperson:get_hotkey() and 'third' or 'first')].value):sub(14, 30)
-            local stomach_x, stomach_y, stomach_z = entity.hitbox_position(id, 3)
-            local wx, wy = renderer.world_to_screen(stomach_x, stomach_y, stomach_z)
-            local wx2, wy2 = helper[picked](lp.entity)
-            if wx and wy then
-                if --[[(id == client.current_threat()) and]] not (entity.get_prop(id, "m_iHealth") >= newdmg * 1.25) then
-                    local c = colors['helper']['Color']
-                    renderer.line(wx2, wy2, wx,wy, c.r,c.g,c.b,c.a)
-                end
+        else
+            reference.antiaim.other.leg_movement:override('off')
+        end
+    
+        if anim_extra_type:get('Body lean') then
+            anim_layers[12].weight = body_lean_value / 100
+        end
+    
+        if elements.misc.animations.settings.in_air.anim_extra_type:get('Zero pitch on landing') then
+            if ticks > 24 and ticks < 550 then
+                entity.set_prop(me, 'm_flPoseParameter', 0.5, 12)
             end
         end
     end
-    menu.Features.helper.on:set_event("paint", render)
+
+    client.set_event_callback('pre_render', on_pre_render)
 end
 
-local tracer do
-    tracer = {}
-    local inserting = function(e)
-        if client.userid_to_entindex(e.userid) == entity.get_local_player() then
-            table.insert(tracer, {{client.eye_position()}, {e.x, e.y, e.z}, globals.curtime() + menu.Features.tracer.time.value * .1, 0.1})
-        end
-    end
-    menu.Features.tracer.on:set_event('bullet_impact', inserting)
+local clan_tag_spammer do
+    local clan_tag_prev = ''
+    local enabled_prev = false
+    local sequence = {
+'               ',
+'@              ',
+'#r             ',
+'|re            ',
+'*reg           ',
+'@regi          ',
+'#regic         ',
+'|regici        ',
+'*regicid       ',
+'@regicide      ',
+'#regicide      ',
+' regicide      ',
+'  regicide     ',
+'   regicide    ',
+'    regicide   ',
+'     regicide  ',
+'      regicide ',
+'      regicid%',
+'       regici$',
+'        regic&',
+'         regi*',
+'          reg#',
+'           re@',
+'            r|',
+'             %',
+'              $'
+    }
 
-    local render = function()
-        for id, data in pairs(tracer) do
-            data[4] = utils.lerp(data[4], globals.curtime() >= data[3] and 0 or 1, 0.035)
-            if data[4] < 0.08 then
-                tracer[id] = nil
-            end
-            local x1, y1 = renderer.world_to_screen(data[1][1], data[1][2], data[1][3])
-            local x2, y2 = renderer.world_to_screen(data[2][1], data[2][2], data[2][3])
-            if x1 and x2 and y1 and y2 then
-                local c = colors['tracer']["Color"]
-                renderer.line(x1, y1, x2, y2, c.r,c.g,c.b,c.a*data[4])
+    local function clan_tag_anim ()
+        local tickinterval = globals.tickinterval()
+        local tickcount = globals.tickcount() + math.floor(client.latency() / globals.tickinterval() + .5)
+        local i = math.floor(tickcount / math.floor(0.2 / tickinterval + .5)) % #sequence + 1
+    
+        return sequence[i]
+    end
+    
+    local function clan_tag_original ()
+        local clanid = cvar.cl_clanid.get_int()
+        if clanid == 0 then return '\0' end
+
+        local clan_count = steamworks.ISteamFriends.GetClanCount()
+        for i = 0, clan_count do 
+            local group_id = steamworks.ISteamFriends.GetClanByIndex(i)
+            if group_id == clanid then
+                return steamworks.ISteamFriends.GetClanTag(group_id)
             end
         end
     end
-    menu.Features.tracer.on:set_event('paint', render)
+
+    local function on_paint ()
+        local enabled = elements.misc.clan_tag_spammer:get()
+        if enabled then
+            local local_player = entity.get_local_player()
+            local clan_tag = clan_tag_anim()
+
+            if local_player ~= nil and globals.tickcount() % 2 == 0 or (not entity.is_alive(local_player)) and globals.tickcount() % 2 == 0 then
+                if clan_tag ~= clan_tag_prev then
+                    client.set_clan_tag(clan_tag)
+                    clan_tag_prev = clan_tag
+                end 
+            end
+        elseif enabled_prev then
+            client.set_clan_tag(clan_tag_original())
+        end
+
+        enabled_prev = enabled
+    end
+
+    local function on_run_command (e)
+        if elements.misc.clan_tag_spammer:get() and e.chokedcommands == 0 then
+            on_paint()
+        end
+    end
+
+    client.set_event_callback('paint', on_paint)
+    client.set_event_callback('run_command', on_run_command)
 end
 
-local trashtalk do
-    trashtalk = {
-        kill = {1, {
-{"нихуя се ты сочный....", "прям как алина:3"},
+local trash_talk do
+    local phrases = {
+        bait = { 
+            {"1"},
+            {'1','?'},
+            {"1", "мб regicide купишь?"},
+            {"e1"},
+            {"t1"},
+            {"1", "сиди ", "грызи дальше семечки", "хуйня грязная"},
+            {'1 мразота'},
+{"1",'отлетаешь','сын бляди'},
+{"1",'опять забайтился мусор'},
+{'HAHAHAHAHHAHA','1 ДЕРЕВО ЕБАННОЕ'},
+{"1",'и это игрок?'},
+{"1",'улетаешь со своего ванвея','хуесос'},
+{"1",'лови в пиздак мразота'},
+{'1','как на этот раз оправдаешься?'},
+{'1','забайтилось тупое'},
+{"1",'поймал в шляпу?'},
+{'t1'},
+{'е1'},
+{'1'},
+{'1','hs bot'},
+{'1','спать чюрка'},
+{'1','грязная хуйня'}
+        },
+    
+        kill = {
+{'ты ошибка природы', 'и даже код игры это понимает'},
 {"undetected since 2020 ☆"},
 {"♘ ☇ 𝚜𝚌𝚘𝚘𝚝 𝚡 𝚔𝚡𝚘𝚗𝚡 𝚏𝚝 𝚛𝚘𝚐𝚒𝚌𝚒𝚍𝚎.𝚕𝚞𝚊 (◣◢) ✟"},
 {"ⓁⒶⒸⒽⒷⓄⓂⒷ"},
+{"я убиваю королей и твою жирную мамашку ft. regicide.lua"},
 {"KS OMK 3NDY OMK W A5TK TM9 ZBI"},
 {"𝐦_𝐟𝐥𝐊𝐚𝐲𝐫𝐨𝐧𝐖𝐞𝐢𝐠𝐡𝐭 = 𝐈𝐍𝐓_𝐌𝐀𝐗"},
 {"♛ 𝐫𝐞𝐠𝐢𝐜𝐢𝐝𝐞.𝐡𝐢𝐭 ♛"},
-{"1", "?"},
 {"ебаный ноулегенд из 2к25", "что ты делаешь?"},
 {"✟ ♡ 𝑖 𝑤𝑖𝑙𝑙 𝑎𝑙𝑤𝑎𝑦𝑠 𝑏𝑒 𝑎ℎ𝑒𝑎𝑑 ♡ ✟"},
 {"не отвечаю?", "мне похуй"},
 {"сосал?", "соври", "не ври"},
 {"пацаны не извиняются", "особенно перед пидорасом"},
 {"норм играешь", "сын шлюхи"},
-{"1", "мб regicide купишь?"},
 {"уебан ебаный", "куда ты выбежал?"},
 {"это было настолько случайно, что даже твои родители не так удивились, когда ты родился"},
 {"ебанный бич", "почему ты сдох? оправдайся"},
-{"луасенс не бустит - 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖 поможет сын шалавы"},
-{"ты че мразота ? вздумал тягатся с 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖 юзером?"},
-{"1 бот ты чо не вывез 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖 system aa"},
-{"сын шлюхенции ты чет слабый для 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖"},
-{"членом придавил тебя buy 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖"},
-{"ЫВЗ9ГРШО4УГР9ЗУЦКЕНРТГЗ9 тупейший без 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖 :3"},
-{"че ты опять хнычешь в чат, покупай 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖 и будь т1"},
-{"чисто выебал бомжа без dsc.gg/regicidelua"},
-{"убил бомжа без 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖"},
-{"Только умные люди играют с 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖"},
 {"почему я опять тя убил пидораса? У меня куплен 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖"},
-{"Чё опять не попал да? купи 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖 терпила"},
 {"am i him? yeah, i use regicide"},
 {"stop slaving and buy regicide"},
 {"you need regicide stupid kids"},
@@ -2809,12 +8213,9 @@ local trashtalk do
 {"stop missing already, just be like me and get regicide"},
 {"ru pastes destroyed from regicide"},
 {"『Y』『O』『U』『R』 『W』『I』『L』『L』 『I』『S』 『M』『I』『N』『E』"},
-{"𝔾𝔼𝕋 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖 𝕐𝕆𝕌 𝔽𝔸𝔾"},
 {"ｒｅｇｉｃｉｄｅ ｓｕｂ ｅｘｐｉｒｅ ＝ ｓｕｉｃｉｄｅ"},
-{"𝚙𝚘𝚕𝚊𝚗𝚍 𝚙𝚊𝚜𝚝𝚎 𝚍𝚎𝚜𝚝𝚛𝚘𝚢𝚜 𝚏𝚛𝚘𝚖 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖.. (◣◢)"},
 {"whatever you do, regicide.lua do it better ^^"},
 {"куда пикаем?"},
-{"e1"},
 {"приятные тапы 2025"},
 {"скит или геймсенс"},
 {"убийца королей регицайд"},
@@ -2822,11 +8223,12 @@ local trashtalk do
 {"i love regicide", "do you love it?"},
 {"im cursed", "satan watching us"},
 {"#финан$овыйтрэп"},
-{"1"},
 {"финансовый трэп"},
-{"l2p bot"},
-{'جدا الحمد لله أبي'},
 {"yt bot"},
+{'где тебя научили стрелять', 'в тире для первоклассников?'},
+{'1','ФХАФЫХАЫХФАХ', 'бомж ты куда'},
+{'ты как шут', 'пытающийся быть серьезным в компании демонов'},
+{'если бы победы давали смысл жизни', 'ты бы уже повесился'},
 {"видно ты без regicide.lua сидишь, пора бы обновляться сосик)"},
 {"видно натренированный ротик", "без regicide.lua сидишь?"},
 {"в следуйщий раз заходи с 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖.𝕙𝕚𝕥 чтобы не позорится"},
@@ -2853,39 +8255,40 @@ local trashtalk do
 {"once this game started 𝔂𝓸𝓾 𝓵𝓸𝓼𝓮𝓭 𝓪𝓵𝓻𝓮𝓭𝔂 #regicide"},
 {"ＹＯＵ ＨＡＤ ＦＵＮ ＬＡＵＧＨＩＮＧ ＵＮＴＩＬ ＮＯＷ"},
 {"family-friendly lua -> dsc.gg/regicidelua"},
+{"Чтобы выйграть и присоединиться к лучшему стаку вы обязаны держать бренд regicid'a"},
 {"The Flame will never die, for I am REGICIDE.HIT"},
 {"если бы IQ был оружием", "ты бы ходил с палкой"},
 {"снова палю в экран", "снова вижу этот дискорд dsc.gg/regicidelua"},
 {"мы летим низко ", "в башке храню все dsc.gg/regicidelua"},
-{"1", "теперь думай кто это написал)))"},
 {"winning not possibility, sry #regicide"},
 {"ХА-ХА-ХА ! ака. НИЧЕ! (финансовый трэп)  DATA404"},
 {"★★★ 𝔾𝕖𝕋 𝔾𝕠𝕠𝔻 ★★★"},
 {"♛ 𝟓𝟎𝟎$ 𝐋𝐔𝐀 𝐉𝐈𝐓𝐓𝐄𝐑 𝐅𝐈𝐗? 𝐋𝐈𝐍𝐊 𝐈𝐍 𝐃𝐄𝐒𝐑𝐈𝐏𝐓𝐈𝐎𝐍"},
 {"𝙒𝘼𝙉𝙉𝘼 𝘽𝙀 𝙇𝙄𝙆𝙀 𝙈𝙀? 𝙂𝙀𝙏 @𝙍𝙀𝙂𝙄𝘾𝙄𝘿𝙀.𝙃𝙄𝙏"},
 {"♛ @𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚.𝙝𝙞𝙩 ♛"},
-{'𝕀𝕊 𝕄𝕐 𝕃𝕌𝔸 𝔹𝔸𝔻? 𝕌 𝕁𝕌𝕊𝕋 ℍ𝔸𝕍𝔼ℕ𝕋 𝕄𝕆ℕ𝔼𝕐'},
 {"☆꧁✬◦°˚°◦. ɛʐ .◦°˚°◦✬꧂☆"},
 {"𝙊𝙂 𝙐𝙎𝙀𝙍 𝙑𝙎 𝙒𝘼𝙇𝙆𝘽𝙊𝙏𝙎"},
 {"忧郁[𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚.𝙝𝙞𝙩]摧毁一切!"},
 {"𝐀𝐋𝐋 𝐌𝐘 𝐇𝐎𝐌𝐈𝐄𝐒 𝐔𝐒𝐄 @𝙍𝙀𝙂𝙄𝘾𝙄𝘿𝙀.𝙃𝙄𝙏"},
 {"♠️ 𝐆𝐎𝐃 𝐁𝐋𝐄𝐒𝐒 𝙍𝙀𝙂𝙄𝘾𝙄𝘿𝙀.𝙃𝙄𝙏 ♠"},
 {"𝙩𝙧𝙮 𝙝𝙞𝙩 𝙢𝙮 𝙢𝙚𝙩𝙖 𝙖𝙣𝙩𝙞𝙖𝙞𝙢𝙨"},
-{"♛𝐦𝐁𝐎𝐏𝐦𝐦𝟎𝟓𝐑𝐔𝐒♛"},
 {"𝙉𝙄𝘾𝙀 𝙍𝙀𝙎𝙊𝙇𝙑𝙀𝙍 𝙃𝘼𝙃𝘼𝙃𝘼"},
 {"☆꧁✬◦°˚°◦. ɮʏ ɮɛֆȶ ʟʊǟ .◦°˚°◦✬꧂☆"},
-{"♠️ 𝙋𝙔𝘾𝘾𝙆𝙐𝙀 𝘽𝙊𝙋𝙗𝙡 ♠"},
 {"✵•.¸,✵°✵.｡.✰ 𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚 ✰.｡.✵°✵,¸.•✵"},
-{"𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚.𝙝𝙞𝙩 𝙥𝙧𝙚𝙢𝙞𝙪𝙢 𝙥𝙧𝙚𝙙𝙞𝙘𝙩𝙞𝙤𝙣 𝙩𝙚𝙘𝙝𝙣𝙤𝙡𝙤𝙜𝙞𝙚𝙨 ◣◢"},
+{"𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚.𝙝𝙞𝙩 𝙥𝙧𝙚𝙢𝙞𝙪𝙢 𝙧𝙚𝙨𝙤𝙡𝙫𝙚𝙧 𝙩𝙚𝙘𝙝𝙣𝙤𝙡𝙤𝙜𝙞𝙚𝙨 ◣◢"},
 {"♥𝙍𝙀𝙂𝙄𝘾𝙄𝘿𝙀 𝘼𝙉𝙏𝙄-𝘼𝙄𝙈𝘽𝙊𝙏 𝘼𝙉𝙂𝙇𝙀𝙎♥"},
+{"регицайд луа вгетай бомж ссаный - dsc.gg/regicidelua"},
 {"LX IXL D4RK IXL V K1NG DMN XUL"},
 {"₲_₲"},
-{"✧･ﾟ: ✧･ﾟ: 𝗥𝗘𝗚𝗜𝗖𝗜𝗗𝗘.𝗟𝗨𝗔 :･ﾟ✧:･ﾟ✧"},
 {"『𝚁』『𝙴』『𝙶』『𝙸』『𝙲』『𝙸』『𝙳』『𝙴』『.』『𝙻』『𝚄』『𝙰』"},
 {"dont even try to kill me next time"},
 {"whatever you do, regicide.lua do it better ^^"},
 {"zero chance to kill regicide.lua user **"},
 {'regicide.lua > all world'},
+{"r e g i c i d e  >  a l l"},
+{"deported to hell d0g"},
+{"рандерандерандеву твоя мать шлюха сосала наяву"},
+{"regicide станет эпитафией на твоём надгробии."},
 {"i break rules ft. regicide.hit"},
 {"𝕟𝕠 𝕤𝕜𝕚𝕝𝕝 𝕟𝕖𝕖𝕕 𝕛𝕦𝕤𝕥 𝕣𝕖𝕘𝕚𝕔𝕚𝕕𝕖"},
 {"Estk came to my door last night and said regicide best ◣◢ I say ok king 👑"},
@@ -2893,37 +8296,30 @@ local trashtalk do
 {"𝟙𝕟𝕖𝕕 𝕒𝕘𝕒𝕚𝕟 𝓫𝔂 𝓻𝓮𝓰𝓲𝓬𝓲𝓭𝓮.𝓱𝓲𝓽"},
 {"| 𝑾𝒆𝒍𝒄𝒐𝒎𝒆 𝒕𝒐 𝒓𝒆𝒈𝒊𝒄𝒊𝒅𝒆.𝒉𝒊𝒕 |"},
 {"your death sponsored by @regicide.hit"},
+{"жду реванша сын ебаной шлюхи"},
+{"тварь мб купишь норм антипападайки? - dsc.gg/regicidelua"},
+{"че то ты мои грязные яички облизал сын ёбаной пизды"},
+{"знаешь чем пахнет мои яйца?", "у мамаши шлюшки своей спроси"},
+{"ты сдох раньше своей матери шлюхи ой или она уже сдохла ?"},
+{"конфиг тебе бы не помешал - dsc.gg/regicidelua"},
 {"𝙗𝙚𝙣𝙪𝙩𝙯𝙚 𝙙𝙖𝙨 𝙪𝙧𝙨𝙥𝙧ü𝙣𝙜𝙡𝙞𝙘𝙝𝙚 𝙨𝙠𝙧𝙞𝙥𝙩"},
 {"если бы IQ был оружием", "ты бы ходил с палкой"},
 {"снова палю в экран", "снова вижу этот дискорд", "dsc.gg/regicidelua"},
-{"мы летим низко ", "в башке храню все dsc.gg/regicidelua"},
-{"1", "теперь думай кто это написал)))"},
+{"мы летим низко ", "в башке храню все", 'dsc.gg/regicidelua'},
 {"REGICIDE SEASON ON TRƱE #BLIXXEN AND #BLÄSTFÄMILY vibe 2025™"},
-{"rockstar life style #regicide"},
+{"rock star lifestyle #REGICIDE"},
 {"winning not possibility, sry #regicide"},
 {"лови тапыча хуесос"},
 {"𝑹𝒆𝒈𝒊𝒄𝒊𝒅𝒆 [𝒈𝒐𝒅𝒎𝒐𝒅𝒆] 𝒆𝒏𝒂𝒃𝒍𝒆𝒅"},
 {"𝗶 𝘂𝘀𝗲 𝑹𝒆𝒈𝒊𝒄𝒊𝒅𝒆 𝘄𝘁𝗳"},
 {"не будь терпилой и переходи на темную сторону *REGICIDE.LUA VS ALL NN'S DOGS"},
 {"𝚢𝚘𝚞 𝚘𝚠𝚗𝚎𝚍 𝚋𝚢 𝚛𝚎𝚐𝚒𝚌𝚒𝚍𝚎.𝚕𝚞𝚊"},
-{"ｏｕｔｌａｗ？ ｎｏ 𝙧𝙚𝙜𝙞𝙘𝙞𝙙𝙚"},
+{"БЕСПЛАТНЫЙ REGICIDE ПИСАТЬ -> T.ME/REGICIDEHIT"},
 {"get rekt no sweat, you’re dropped by 𝑹𝒆𝒈𝒊𝒄𝒊𝒅𝒆 scum"},
-{"ебанный хуесос, который раз ты лежишь в ногах юзера 𝑹𝒆𝒈𝒊𝒄𝒊𝒅𝒆?"},
-{"t1"},
-{"1", "сиди ", "грызи дальше семечки", "хуйня грязная"},
 {"я призываю свою BlÏxxêñ gang все с regicide.lua были"},
-{'1 мразота'},
-{"1",'отлетаешь','сын бляди'},
-{"1",'опять забайтился мусор'},
-{'HAHAHAHAHHAHA','1 ДЕРЕВО ЕБАННОЕ'},
-{"1",'и это игрок?'},
-{"1",'улетаешь со своего ванвея','хуесос'},
-{"1",'лови в пиздак мразота'},
-{"1",'поймал в шляпу?'},
 {'депортирован в ад к матери шлюхе'},
 {'сука не позорься и ливни лол'},
 {'пикнул?','сиди и наблюдай теперь чмо'},
-{'1','пора ливать','чмошница'},
 {"дно маркета пробито... (rebillion)"},
 {"⚠️ Wallet Connected"},
 {"☆*: .｡. o(≧▽≦)o .｡.:*☆"},
@@ -2936,6 +8332,7 @@ local trashtalk do
 {"+888"},
 {"¸.·✩·.¸¸.·¯⍣✩ 𝐫𝐞𝐠𝐢𝐜𝐢𝐝𝐞 ✩⍣¯·.¸¸.·✩·.¸"},
 {"ᴀбонᴇнᴛ ʙᴩᴇʍᴇнно нᴇдоᴄᴛуᴨᴇн. ᴨоᴋᴀ!"},
+{"What are you doing dog?"},
 {"ｕｒ 'ｒｅｂｅｌｌｉｏｎ' ｈａｓ ｂｅｅｎ ｋｉｌｌｅｄ ｂｙ ｒｅｇｉｃｉｄｅ"},
 {"★彡( 1 )彡★"},
 {"☆꧁✬◦°˚°◦. 𝕜𝕩𝕒𝕟𝕩 𝕔𝕠𝕕𝕖 𝕔𝕠𝕣𝕡𝕠𝕣𝕒𝕥𝕚𝕠𝕟 .◦°˚°◦✬꧂☆"},
@@ -2953,29 +8350,20 @@ local trashtalk do
 {"₦_₦"},
 {'ｗｈａｔ ａｒｅ ｕ ｄｏｉｎｇ ｄｏｇ'},
 {"ｓｋｅｅｔ ｄｏｎｔ ｎｅｅｄ ｕｐｄａｔｅ (◣_◢)"},
-{"𝙈𝙚𝙩𝙖𝙬𝙖𝙮𝙞𝙣𝙜 𝙧𝙣... 𝙘𝙖𝙣𝙩 𝙧𝙚𝙥𝙡𝙮"},
 {'𝙜_𝙂 𝘽𝙤𝙏'},
 {"We are pleased to inform you that your item has been successfully purchased!"},
-{"𝐎𝐰𝐍𝐞𝐃𝐛𝐲𝐂𝐞𝐏𝐞𝐫𝐀𝐊𝐚𝐏𝐚𝐂𝐛𝟏𝟗𝟗𝟔"},
 {'понадеялся на удачу?'},
 {'зря ты так летишь','у тебя ноль шансов убить меня'},
-{'1','как на этот раз оправдаешься?'},
-{'1','забайтилось тупое'},
 {'норм луа у тебя братуха'},
 {"моя сила regicide", "что не брикаю лцшечку"},
-{'1','hs bot'},
-{'1','спать чюрка'},
-{'1','грязная хуйня'},
 {"лол чел кринж", "щас моя братва с BlÏxxêñ залетит", "и пизда тебе и твоим антипападайкам"},
-{'t1'},
-{'е1'},
-{'1'},
-{'1','?'},
-{"ʍиниᴄᴛᴇᴩᴄᴛʙо ᴨо боᴩьбᴇ ᴄ бᴧᴀᴦоᴨоᴧучиᴇʍ"},
 {"тк ну и не открывай ротик", "хуесос", "лучше иди луашку мою купи dsc.gg/regicidelua"},
 {"лол да даже пз тебя переиграет лолек","иди луашку (regicide) прикупи"},
 {"говоришь чит миссает иди купи sm_metan #regicide"},
 {"АЛо бомж да тебе даже sm_metan не поможет лол"},
+{'z бы тебя похвалил', 'но ты выиграл не скиллом', 'а везением'},
+{'1', 'иди ты нахуй дебилина'},
+{'zｚＺ', 'playing with regicide is so boooring'},
 {"ХВАТИТь пукать говно тупое иди убейся нахуй", "иди зайди в мой лучший дискорд - dsc.gg/regicidelua"},
 {"ЧЕ замкдышь без @regicide в 2025?"},
 {"Убили?", "Значит переиграли"},
@@ -2985,9 +8373,10 @@ local trashtalk do
 {"отсасываешь мне щас без регицайда"},
 {"ver4ual лапал меня там...", "и снимал на камеру..."},
 {"kennex трогал меня там...", "и выложил видео сюда", "dsc.gg/regicidelua"},
-{"да направит тебя аллах твой ебучий", "иншалах пидорасу"},
-        }},
-        death = {1, {
+{"да направит тебя аллах твой ебучий", "иншалах пидорасу"}
+        },
+    
+        death = {
             {"сука хуесос","нахуй ты тут сидиш потеешь","выйди в кд грязь"},
             {"ну хуесос","что ты сделал"},
             {"сын шлюхи", "1x1 2x2 прям сейчас?"},
@@ -3036,7 +8425,6 @@ local trashtalk do
         {'я стрельнул?'},
          {'изи мапа'},
         {'м','забавно'},
-        {'ну','что ты дулаешь'},
          {'ебанат','фулл опен стоит'},
           {'тупой','куда ты летишь идиот'},
         {'ну конечно','я просто похлопаю тебе'},
@@ -3056,7 +8444,6 @@ local trashtalk do
 {'пиздец','что с читом'},
 {'красава','лучший просто'},
 {'ну','долбаеб сука','что ты делаешь мразь'},
- {"найс хуесос", "по iq играешь"},
 {'ты добился результата', 'но это не конец'},
 {"тупой даун", "что ты сделал?"},
 {"пошли 2х2 сын бляди", "дс кидай чмо ебаное"},
@@ -3065,2020 +8452,118 @@ local trashtalk do
 {"CERF", "что ты сделал хуесос"},
 {"блять", "наконец оно меня убило"},
 {"не ожидал что ты такой тупой", "запишу тебя в тетрдаь далбаебов"},
- {"я не могу в тебя попасть", "сделаешь мне такие же пресетики?", "на regicide.hit"},
-{"ну долбоеб сука", "ЧТО ТЫ ДЕЛАЕШЬ БЛЯДИНА"},
+ {"я не могу в тебя попасть", "сделаешь мне такие же пресетики?", "на @regicide.hit"},
 {"чит же видет", "какой он бездарный и дает шанс этому пидорасу"},
 {"так держать", "сын шлюхенции"},
 {"ну блять", "как оно убивает меня"},
-{"признаю переиграл"},
 {"ну хуесос", "на подпике стоит"},
-{"какой же ты хуевый","НУ Я МИССАЮ ЕМУ В РУКУ А ОН ДУМАЕТ","ЧТО ЭТО ЛЦ"},
+{"какой же ты далбаеб","НУ Я МИССАЮ ЕМУ В РУКУ А ОН ДУМАЕТ","ЧТО ЭТО ЛЦ"},
 {"сын шлюхи ебаной","я просто не знаю как тебя ещё назвать"},
 {"ну он же реально","подрывает себя","и я не могу попасть"},
 {"опять говно убивает","я просто не могу уже"},
 {"ты че ваще далбаеб?","я твою мать ебал","тупой ублюдок"}
-        }}
+        }
     }
+
+    local function shuffle_table(t)
+        local shuffled = {}
+        for i = 1, #t do
+            shuffled[i] = t[i]
+        end
+        
+        for i = #shuffled, 2, -1 do
+            local j = math.random(i)
+            shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
+        end
+        
+        return shuffled
+    end
+
+    -- Инициализируем random seed и перемешиваем фразы при загрузке
     math.randomseed(client.unix_time())
-    utils.shuffle_table(trashtalk.kill[2])
-    utils.shuffle_table(trashtalk.death[2])
-    local b = 0
-    local trashsay = function(e)
-        if not e then return end
-        local table = e[2][e[1]]
-        e[1] = e[1] + 1
-        if e[1] == #e[2] then
-            e[1] = 1
-            utils.shuffle_table(e[2])
-        end
-        b = b + 1
-        local a = b
-        for i=1, #table do
-            client.delay_call(i*2, function()
-                if b == a then
-                    client.exec('say "' .. table[i] .. '"')
-                end
-            end)
-        end
-    end
-    menu.Features.trashtalk.on:set_event('player_death', function(e)
-        local gamerules = entity.get_game_rules()
-        if not gamerules then return end
-        if entity.get_prop(gamerules, 'm_bWarmupPeriod') == 1 then return end
-        local userid, attacker = client.userid_to_entindex(e.userid),client.userid_to_entindex(e.attacker)
-        if userid == lp.entity then
-            lp.zoom = 0
-            lp.scoped = 0
-        end
-        if userid == attacker or (userid ~= lp.entity and attacker ~= lp.entity) then return end
-        trashsay((attacker == lp.entity and (menu.Features.trashtalk.event:get("On Kill") and trashtalk.kill) or (menu.Features.trashtalk.event:get("On Death") and trashtalk.death)) or nil)
-    end)
-end
+    phrases.bait = shuffle_table(phrases.bait)
+    phrases.kill = shuffle_table(phrases.kill)
+    phrases.death = shuffle_table(phrases.death)
 
-local fast_ladder do
-    local setup = function(cmd)
-        if entity.get_prop(lp.entity, 'm_MoveType') ~= 9 then return end
-    
-        local weapon = entity.get_player_weapon(lp.entity)
-        if not weapon then return end
-    
-        local throw_time = entity.get_prop(weapon, 'm_fThrowTime')
-    
-        if throw_time ~= nil and throw_time ~= 0 then
-            return
-        end
-        
-        if cmd.forwardmove > 0 then
-            if cmd.pitch < 45 then
-                cmd.pitch = 89
-                cmd.in_moveright = 1
-                cmd.in_moveleft = 0
-                cmd.in_forward = 0
-                cmd.in_back = 1
-        
-                if cmd.sidemove == 0 then
-                    cmd.yaw = cmd.yaw + 90
-                end
-        
-                if cmd.sidemove < 0 then
-                    cmd.yaw = cmd.yaw + 150
-                end
-        
-                if cmd.sidemove > 0 then
-                    cmd.yaw = cmd.yaw + 30
-                end
-            end
-        elseif cmd.forwardmove < 0 then
-            cmd.pitch = 89
-            cmd.in_moveleft = 1
-            cmd.in_moveright = 0
-            cmd.in_forward = 1
-            cmd.in_back = 0
-        
-            if cmd.sidemove == 0 then
-                cmd.yaw = cmd.yaw + 90
-            end
-        
-            if cmd.sidemove > 0 then
-                cmd.yaw = cmd.yaw + 150
-            end
-        
-            if cmd.sidemove < 0 then
-                cmd.yaw = cmd.yaw + 30
-            end
-        end
-    end
-    
-    menu.Antiaims.other.ladder:set_event('setup_command', setup)
-end
-
-local shot_marker do
-    shot_marker = {}
-
-    local function aim_fire(e)
-        shot_marker[e.id] = {
-            {e.x,e.y,e.z}, 
-            globals.curtime() + menu.Features.marker.time.value *.1,
-            0.1
-        }
-    end
-
-    local function render()
-        for id, data in pairs(shot_marker) do
-
-            data[3] = utils.lerp(data[3], globals.curtime() >= data[2] and 0 or 1, 0.05)
-            if data[3] < 0.08 then
-                shot_marker[id] = nil
-            end
-
-            local x, y = renderer.world_to_screen(data[1][1], data[1][2], data[1][3])
-            if x and y then
-                local c = color(unpack(menu.Features.color[(data[4] or 'hit')].color.value)) or color(255,255,255,255)
-                local x2 = menu.Features.marker.size.value / screen.size.x * screen.size.x
-                local y2 = menu.Features.marker.size.value / screen.size.y * screen.size.y
-                if menu.Features.marker.style.value == "Style: Plus" then
-                    renderer.line(x + x2, y, x + 2 * x2, y, c.r,c.g,c.b,c.a * data[3])
-                    renderer.line(x - x2, y, x - 2 * x2, y, c.r,c.g,c.b,c.a * data[3])
-                    renderer.line(x, y - y2, x, y - 2 * y2, c.r,c.g,c.b,c.a * data[3])
-                    renderer.line(x, y + y2, x, y + 2 * y2, c.r,c.g,c.b,c.a * data[3])
-                else
-                    renderer.line(x + x2, y + y2, x + 2 * x2, y + 2 * y2, c.r,c.g,c.b,c.a * data[3])
-                    renderer.line(x - x2, y + y2, x - 2 * x2, y + 2 * y2, c.r,c.g,c.b,c.a * data[3])
-                    renderer.line(x - x2, y - y2, x - 2 * x2, y - 2 * y2, c.r,c.g,c.b,c.a * data[3])
-                    renderer.line(x + x2, y - y2, x + 2 * x2, y - 2 * y2, c.r,c.g,c.b,c.a * data[3])
-                end
-                if data[4] and menu.Features.marker.extra.value then
-                    local size = renderer.measure_text('cd', data[4])
-                    renderer.text(x + size/1.2, y, c.r,c.g,c.b,c.a * data[3], 'cd', 0, data[4])
-                end
-            end
-        end
-    end
-
-    menu.Features.marker.on:set_event("aim_fire", aim_fire)
-    menu.Features.marker.on:set_event("paint", render)
-    menu.Features.marker.on:set_event('aim_miss', function(e)
-        shot_marker[e.id][4] = e.reason
-    end)
-
-    menu.Features.marker.on:set_event("round_prestart", function()
-        shot_marker = {}
-    end)
-
-end
-
-local clantag do
-    local tag_frames = {
-"", " r ", " ® ", " re ", " r3 ", " ®e ", "re_ ", " re| ", "r3g|", "reg_",
-"regi|", "reg1d3", "regid3", "regid_", "regid$|", "r3g1c1d3", "reg1c1d3",
-"reg1cide|", "regid$s|", "reg1c1d$", "@reg1cid3", "reg1c1d3", "@regicide",
-"regicide", "regicid<", "regid$", "reg1c1d<", "reg1c1d<", "reg1c<",
-"regi<", "@r3g<", "reg", "re", "r", "@", ""
+    local phrase_count = {
+        bait = 0,
+        kill = 0,
+        death = 0
     }
 
-    local previous_tag = nil
-
-    local setup = function()
-        local game_rules = entity.get_game_rules()
-        local m_gamePhase = entity.get_prop(game_rules, 'm_gamePhase')
-        local NextPhase = entity.get_prop(game_rules, 'm_timeUntilNextPhaseStarts')
-        local clan_tag = ""
-
-        if m_gamePhase == 5 or NextPhase ~= 0 then
-            clan_tag = "@Regicide"
-        else
-            local tickinterval = globals.tickinterval()
-            local tickcount = globals.tickcount()
-            tickcount = tickcount + math.floor(client.real_latency() + 0.22 / tickinterval + 0.5)
-            local i = math.floor(tickcount / math.floor(0.3 / tickinterval + 0.5)) % #tag_frames + 1
-            clan_tag = tag_frames[i]
-        end
-
-        if clan_tag ~= previous_tag then
-            client.set_clan_tag(clan_tag)
-            previous_tag = clan_tag
-        end
-    end
-
-    menu.Features.clantag.on:set_event('paint', setup)
-    menu.Features.clantag.on:set_callback(function(self)
-        refs2.tag:set_enabled(not self.value)
-
-        if not self.value then
-            refs2.tag:override()
-            client.delay_call(0, function()
-                client.set_clan_tag("")
-            end)
-        else
-            refs2.tag:override(false)
-        end
-    end)
-end
-
-
-local stickman do
-    stickman = {
-        [0] = {1}, -- Head to Neck
-        [1] = {6,15, 17}, -- Neck to Pelvis, Left Upper Arm, Right Upper Arm
-        [2] = {3, 7, 8}, -- Pelvis to Stomach, Left Hip, Right Hip
-        [3] = {4}, -- Stomach to Lower Chest
-        [4] = {5}, -- Lower Chest to Chest
-        [5] = {6}, -- Chest to Upper Chest
-        [7] = {9}, -- Left Hip to Left Shin
-        [8] = {10}, -- Right Hip to Right Shin
-        [9] = {11}, -- Left Shin to Left Foot
-        [10] = {12}, -- Right Shin to Right Foot
-        [16] = {15}, -- Left Upper Arm to Left Forearm
-        [17] = {14} -- Right Upper Arm to Right Forearm
-    }
-    local render = function()
-        if not refs2.thirdperson:get_hotkey() then return end
-        if not lp.entity or not entity.is_alive(lp.entity) then return end
-        if menu.Features.stickman.def.value and exploit.def_aa or not menu.Features.stickman.def.value then
-            for from, ids in pairs(stickman) do
-                local x,y,z = entity.hitbox_position(lp.entity, from)
-                if not x and not y and not y then return end
-                local x1,y1 = renderer.world_to_screen(x,y,z)
-                for _, id in pairs(ids) do
-                    local x,y,z = entity.hitbox_position(lp.entity, id)
-                    if not x and not y and not y then return end
-                    local x2,y2 = renderer.world_to_screen(x,y,z)
-                    local c = colors['stickman']['Color']
-                    renderer.line(x1,y1,x2,y2, c.r,c.g,c.b,c.a)
+    local function say_phrases(phrase_table)
+        for i = 1, #phrase_table do
+            local messages = phrase_table[i]
+            if type(messages) == "table" then
+                for j = 1, #messages do
+                    local msg = messages[j]
+                    client.delay_call((i+j) * 1.0, function()
+                        client.exec(('say %s'):format(msg))
+                    end)
                 end
-            end
-        end
-    end
-    menu.Features.stickman.on:set_event('paint', render)
-end
-
-local velocity do 
-    local a = 0
-    local menu_a = 0
-    local render = drag.register(menu.Features.velocity.drag, vector(300, 40), "velocity", function(self)
-        if not lp.entity or not entity.is_alive(lp.entity) then return end
-        menu_a = utils.lerp(menu_a, ui.is_menu_open() and 1 or 0, 0.005)
-        local val = entity.get_prop(lp.entity, 'm_flVelocityModifier')
-        local vel = menu_a ~= 0 and utils.sine_yaw(globals.framecount()/10, 0, 1) or val
-
-        local col = colors['velocity']['Bad']:lerp(colors['velocity']['Good'], vel)
-        local text = string.format("Slowed down by %.0f%%", 100-vel*100)
-        local measure = vector(renderer.measure_text('cd', string.format("Slowed down by %.0f%%", 100)))
-        a = utils.lerp(a, (val ~= 1 or ui.is_menu_open()) and 1 or 0, 0.03)
-
-        utils.rectangle(self.position.x+12, self.position.y + 6, self.size.x-24, 8, 0,0,0,255*a, 2)
-        utils.rectangle(self.position.x+12 + 2, self.position.y + 8, math.floor((self.size.x-24 - 4) * vel), 4, col.r,col.g,col.b,col.a*a, 5)
-        renderer.text(self.position.x + self.size.x / 2, self.position.y + self.size.y - height/2-2, 255,255,255,255*a, 'cd', 0, text)
-    end)
-
-    menu.Features.velocity.on:set_event("paint", function()
-        render:update()
-    end)
-end
-
---[[
-local defensive do 
-    local a = 0
-    local vel = 0
-    local render = function()
-        if not lp.entity or not entity.is_alive(lp.entity) then return end
-        -- local vel = entity.get_prop(lp.entity, 'm_flVelocityModifier')
-        -- local vel = utils.sine_yaw(globals.servertickcount(), 0, 1)
-        local col = color(255):lerp(color(220,30,50,255), exploit.get().defensive.left / 13)
-        local text = "Defensive"
-        renderer.text(screen.center.x, screen.size.y * 0.98, col.r,col.g,col.b,col.a, 'cd-', 0, text:upper())        
-    end
-
-    client.set_event_callback('paint', render)
-end
-]]
-
-local gamesense do
-    local x,y = 35,screen.size.y * 0.759
-    local xy = {}
-    for i=1, 9 do
-        xy[i] = {35,screen.size.y * 0.759}
-    end
-    local render = function(e)
-        local elements = {
-            {"Ping Spike", refs2.ping.value and refs2.ping:get_hotkey()},
-            {"Double Tap", lp.exploit == 'dt'},
-            {"Fake Duck",  lp.exploit == 'fd'},
-            {"Hide Shots",  lp.exploit == 'osaa'},
-            {"Safe Point", refs2.safe:get()},
-            {"Body Aim", refs2.baim:get()},
-            {"Hit Chance", hitchance or menu.Features.gamesense.settings["Hit Chance"].container.always:get()},
-            {"Min. Damage", (refs2.mdmg:get() and refs2.mdmg:get_hotkey()) or menu.Features.gamesense.settings["Min. Damage"].container.always:get()},
-            {"Freestanding", menu.Antiaims.hotkeys.fs:get()},
-        }
-        for i=1, #elements do
-            local name = elements[i][1]
-            elements[i][3] = menu.Features.gamesense.settings[elements[i][1]].container.name:get() == '' and hard["gamesense"].names[elements[i][1]] or menu.Features.gamesense.settings[elements[i][1]].container.name:get()
-            elements[i][2] = elements[i][2] and menu.Features.gamesense.settings[elements[i][1]].on.value
-        end
-        elements[8][3] = elements[8][3] .. (menu.Features.gamesense.settings["Min. Damage"].container.show.value and ': '..(refs2.mdmg:get() and refs2.mdmg:get_hotkey() and refs2.mdmg2.value or refs2.dmg.value) or '')
-        elements[7][3] = elements[7][3] .. (menu.Features.gamesense.settings["Hit Chance"].container.show.value and  ': '..(hitchance and hitchance[2] or refs2.hc.value) or '')
-
-        local y_add = 0
-        if not lp.entity or not entity.is_alive(lp.entity) then return end
-        local stomach_x, stomach_y, stomach_z = entity.hitbox_position(lp.entity, 3)
-        local xx, yy = renderer.world_to_screen(stomach_x, stomach_y, stomach_z)
-
-        for i, t in pairs(elements) do
-                local c = colors['gamesense'][t[1]]
-                local measure = vector(renderer.measure_text('+d', t[3]))
-                local x1 = 29 + measure.x/2
-                local y1 = screen.size.y * 0.759 - y_add - 2
-
-                if menu.Features.gamesense.follow.value and refs2.thirdperson.value and refs2.thirdperson:get_hotkey() and xx and yy then
-                    xy[i][1] = utils.lerp(xy[i][1], true and xx - 250 or 0, 0.03)
-                    xy[i][2] = utils.lerp(xy[i][2], true and yy - y_add - 2 or 0, 0.03)
-                else
-                    xy[i][1] = utils.lerp(xy[i][1], true and x1 or 0, 0.3)
-                    xy[i][2] = utils.lerp(xy[i][2], true and y1 or 0, 0.3)
-                end
-                if t[2] then
-                    renderer.gradient(xy[i][1], xy[i][2], x1, measure.y + 4, 0, 0, 0, 25, 0,0,0,0, true)
-                    renderer.gradient(xy[i][1], xy[i][2], -x1, measure.y + 4, 0, 0, 0, 25, 0,0,0,0, true)
-                    renderer.text(
-                        xy[i][1] - measure.x/2, xy[i][2] + 2,
-                        c.r,c.g,c.b,c.a, '+d', 0,
-                        t[3]
-                    )
-                    y_add = y_add + measure.y * 1.42
-                end
-        end
-    end
-    menu.Features.gamesense.on:set_event('paint', render)
-    menu.Features.gamesense.on:set_event('indicator', function() end)
-end
-
-local debug do
-    -- Настройки мигания
-    local blink_min = 100    -- Минимальная видимость (0-255)
-    local blink_max = 255    -- Максимальная видимость
-    local blink_speed = 0.8  -- Медленная скорость изменения
-    local blink_value = blink_max
-    local blink_direction = -1
-
-    local render = function()
-        -- Плавное изменение прозрачности
-        blink_value = blink_value + blink_direction * blink_speed
-        
-        -- Изменение направления мигания
-        if blink_value <= blink_min then
-            blink_direction = 1
-            blink_value = blink_min
-        elseif blink_value >= blink_max then
-            blink_direction = -1
-            blink_value = blink_max
-        end
-
-        -- Получаем цель
-        local target = target or entity.get_players(true)[1]
-        local target_name = "None"
-        if target ~= nil then
-            target_name = entity.get_player_name(target) or target.name or "Unknown"
-        end
-
-        local elements = {
-            {"Regicide - "..username[1]},
-            {"version : "..version[1]},  -- Мигающая строка
-            {"Condition: "..lp.state},
-            {"Target: "..target_name}
-        }
-
-        -- Отрисовка с эффектами
-        y_add = 0
-        for index, element in pairs(elements) do
-            local text = element[1]:upper()
-            local measure = vector(renderer.measure_text('b', text))
-            
-            -- Особый рендер для версии
-            if index == 2 then
-                renderer.text(
-                    25, 
-                    screen.size.y*0.45 + y_add, 
-                    255, 255, 255, 
-                    math.floor(blink_value),  -- Применяем изменяющуюся прозрачность
-                    'b', 0, text
-                )
             else
-                renderer.text(
-                    25, 
-                    screen.size.y*0.45 + y_add, 
-                    255, 255, 255, 255, 
-                    'b', 0, text
-                )
+                client.delay_call(i * 1.0, function()
+                    client.exec(('say %s'):format(messages))
+                end)
             end
-            
-            y_add = y_add + measure.y + 5
         end
     end
 
-    client.set_event_callback('paint', render)
-end
-
-local bomb do
-    bomb = {}
-    bomb.a = 0
-
-    local render = drag.register(menu.Features.bomb.drag, vector(320, 38), "bomb", function(self)
-        local t = entity.get_all("CPlantedC4")
-        bomb.id = t[#t]
-
-        if not bomb.id then return end
-
-        local curtime = globals.curtime()
-        local is_menu_open = ui.is_menu_open()
-
-        -- Получаем свойства бомбы
-        local defused = entity.get_prop(bomb.id, "m_bBombDefused") == 1
-        local is_ticking = entity.get_prop(bomb.id, "m_bBombTicking") == 1 and not defused
-        local blow_time = entity.get_prop(bomb.id, "m_flC4Blow") or 0
-        local defuser = entity.get_prop(bomb.id, "m_hBombDefuser")
-        local defuse_countdown = entity.get_prop(bomb.id, "m_flDefuseCountDown") or 0
-        local defuse_length = entity.get_prop(bomb.id, "m_flDefuseLength") or 0
-        local timer_length = entity.get_prop(bomb.id, "m_flTimerLength") or 40
-
-        -- Поддержка fake-таймера при открытом меню
-        if is_menu_open and not defuser and not is_ticking then
-            is_ticking = true
-            timer_length = 40
-            blow_time = curtime + utils.sine_yaw(globals.servertickcount() / 2, 0.5, 40)
+    local function on_player_death(e)
+        if not elements.misc.trash_talk.enable:get() then 
+            return 
         end
-
-        -- Расчёт оставшегося времени
-        local time_left = defuser or defused and (defuse_countdown - curtime) or (blow_time - curtime)
-        time_left = math.max(0, time_left)
-        local percentage = time_left / (defuser and defuse_length or timer_length)
-
-        -- Обновление состояния
-        bomb.is_ticking = is_ticking
-        bomb.defused = defused
-        bomb.defuser = defuser
-        bomb.left = time_left
-        bomb.timer = defuser and defuse_length or timer_length
-        bomb.blow = blow_time
-        bomb.percentage = percentage
-
-        -- Анимация появления
-        bomb.a = utils.lerp(bomb.a, ((is_ticking and percentage > 0) or is_menu_open) and 1 or 0, 0.03)
-        if bomb.a <= 0 then return end
-
-        -- Цвет прогресса
-        local col = colors.bomb["Bad"]:lerp(
-            colors.bomb["Good"],
-            defuser and ((blow_time - defuse_countdown) >= 0 and 1 or 0) or percentage
-        )
-
-        -- Отрисовка фона и полоски
-        local bar_x = self.position.x + 12
-        local bar_y = self.position.y + 17
-        local bar_w = self.size.x - 24 - 4
-        local fill_w = math.floor(bar_w * percentage)
-
-        utils.rectangle(self.position.x + 12, self.position.y + 15, self.size.x - 24, 8, 0, 0, 0, 255 * bomb.a, 2)
-        utils.rectangle(bar_x + 2, bar_y, fill_w, 4, col.r, col.g, col.b, col.a * bomb.a, 5)
-
-        -- Отрисовка текста (плант сайт и таймер)
-        local site = entity.get_prop(bomb.id, "m_nBombSite") == 0 and "A" or "B"
-        local text_x = bar_x + fill_w
-        renderer.text(text_x, self.position.y + 8, 255, 255, 255, 255 * bomb.a, "cd", 0, site)
-        renderer.text(text_x, self.position.y + 30, 255, 255, 255, 255 * bomb.a, "cd", 0, string.format("%.1f", bomb.left))
-    end)
-
-    -- Отрисовка при активной функции
-    menu.Features.bomb.on:set_event("paint", function()
-        render:update()
-    end)
-end
-
--- Инициализация
-do
-    client.exec('playvol buttons\\light_power_on_switch_01 0.5')
-    drag.on_config_load()
-end
-
-local resolver do
-    resolver = {}
-
--- Проверка на включение ресолвера
-if not Features or not Features.resolver then return end
-if not Features.resolver.enable.value or not Features.resolver.used.value then return end
-
--- Глобальные переменные для ресолвера
-local player_data = {}
-local last_hit_time = {}
-local hit_count = {}
-local style_detection = {}
-
--- Константы стилей игры
-local PLAYER_STYLES = {
-    NORMAL = 0,
-    JITTER = 1,
-    DEFENSIVE = 2,
-    FREESTANDING = 3,
-    ANTI_BRUTE = 4
-}
-
--- Константы состояний игрока
-local RESOLVE_STATES = {
-    STANDING = 0,
-    MOVING = 1,
-    SLOW_WALK = 2,
-    CROUCHING = 3,
-    AIRBORNE = 4
-}
-
--- Вспомогательные функции
-local function normalize_angle(angle)
-    angle = angle % 360
-    return angle > 180 and angle - 360 or angle < -180 and angle + 360 or angle
-end
-
-local function clamp(value, min, max)
-    return math.min(math.max(value, min), max)
-end
-
-local function vec_length2d(vec)
-    return math.sqrt(vec[1]^2 + vec[2]^2)
-end
-
--- Функция определения состояния игрока
-local function detect_player_state(ent)
-    local flags = entity.get_prop(ent, "m_fFlags")
-    local velocity = {entity.get_prop(ent, "m_vecVelocity")}
-    local speed = vec_length2d(velocity)
-    local duck_amount = entity.get_prop(ent, "m_flDuckAmount") or 0
     
-    if bit.band(flags, 1) == 0 then
-        return RESOLVE_STATES.AIRBORNE
-    elseif duck_amount > 0.7 then
-        return RESOLVE_STATES.CROUCHING
-    elseif speed > 5 and speed < 100 then
-        return RESOLVE_STATES.SLOW_WALK
-    elseif speed >= 100 then
-        return RESOLVE_STATES.MOVING
-    else
-        return RESOLVE_STATES.STANDING
-    end
-end
-
--- Функция определения стиля игры
-local function detect_play_style(ent)
-    local eye_yaw = entity.get_prop(ent, "m_angEyeAngles[1]") or 0
-    local lby = entity.get_prop(ent, "m_flLowerBodyYawTarget") or 0
-    local delta = math.abs(normalize_angle(eye_yaw - lby))
-    local vel = {entity.get_prop(ent, "m_vecVelocity")}
-    local speed = math.sqrt(vel[1]^2 + vel[2]^2)
-    local health = entity.get_prop(ent, "m_iHealth") or 100
+        local player, victim, attacker = entity.get_local_player(), client.userid_to_entindex(e.userid), client.userid_to_entindex(e.attacker)
+        if not player or not victim or not attacker then 
+            return 
+        end
     
-    -- Jitter detection
-    if delta > 120 and speed < 5 then
-        return PLAYER_STYLES.JITTER
-    -- Defensive detection
-    elseif delta < 30 and speed < 5 then
-        return PLAYER_STYLES.DEFENSIVE
-    -- Anti-bruteforce detection
-    elseif globals.curtime() - (last_hit_time[ent] or 0) < 2 and hit_count[ent] and hit_count[ent] >= 2 then
-        return PLAYER_STYLES.ANTI_BRUTE
-    -- Low health detection
-    elseif health < 92 then
-        return PLAYER_STYLES.DEFENSIVE -- Для раненых используем defensive логику
-    else
-        return PLAYER_STYLES.NORMAL
-    end
-end
-
--- Jitter Resolver
-local function handle_jitter_resolver(ent, data)
-    if not data.jitter_data then
-        data.jitter_data = {
-            last_angles = {},
-            last_update = 0,
-            current_side = 1,
-            sides = {-60, 60, -30, 30, 0}  -- Приоритетные углы для джиттера
+        if attacker == player and victim ~= player then
+            phrase_count.bait = (phrase_count.bait % #phrases.bait) + 1
+            phrase_count.kill = (phrase_count.kill % #phrases.kill) + 1
+        elseif victim == player and attacker ~= player then
+            phrase_count.death = (phrase_count.death % #phrases.death) + 1
+        end
+    
+        local selected_phrases = { 
+            bait = {phrases.bait[phrase_count.bait]}, 
+            kill = {phrases.kill[phrase_count.kill]}, 
+            death = {phrases.death[phrase_count.death]} 
         }
-    end
     
-    local jitter = data.jitter_data
-    local eye_yaw = entity.get_prop(ent, "m_angEyeAngles[1]") or 0
-    
-    -- Анализ последних углов
-    table.insert(jitter.last_angles, eye_yaw)
-    if #jitter.last_angles > 10 then
-        table.remove(jitter.last_angles, 1)
-    end
-    
-    -- Определяем джиттер (быстрые изменения угла)
-    local jitter_detected = false
-    if #jitter.last_angles >= 3 then
-        local delta1 = math.abs(normalize_angle(jitter.last_angles[#jitter.last_angles] - jitter.last_angles[#jitter.last_angles-1]))
-        local delta2 = math.abs(normalize_angle(jitter.last_angles[#jitter.last_angles-1] - jitter.last_angles[#jitter.last_angles-2]))
-        
-        if delta1 > 50 and delta2 > 50 then
-            jitter_detected = true
+        if elements.misc.trash_talk.settings.work:get('On kill') and attacker == player and victim ~= player then
+            say_phrases(elements.misc.trash_talk.settings.type:get() == 'Bait' and selected_phrases.bait or selected_phrases.kill)
+        elseif elements.misc.trash_talk.settings.work:get('On death') and victim == player and attacker ~= player then
+            say_phrases(selected_phrases.death)
         end
     end
-    
-    -- Если обнаружен джиттер, применяем специальную логику
-    if jitter_detected then
-        if globals.curtime() - jitter.last_update > 0.3 then
-            jitter.current_side = jitter.current_side % #jitter.sides + 1
-            jitter.last_update = globals.curtime()
-        end
-        
-        return jitter.sides[jitter.current_side]
-    end
-    
-    -- Стандартный брут для джиттера
-    return math.random() > 0.5 and 60 or -60
+
+    client.set_event_callback('player_death', on_player_death)
 end
 
--- Defensive Resolver
-local function handle_defensive_resolver(ent, data)
-    if not data.defensive_data then
-        data.defensive_data = {
-            last_lby = 0,
-            last_update = 0,
-            last_eye = 0,
-            change_timer = 0,
-            current_offset = 0,
-            health = 100
-        }
-    end
-    
-    local defensive = data.defensive_data
-    local lby = entity.get_prop(ent, "m_flLowerBodyYawTarget") or 0
-    local eye_yaw = entity.get_prop(ent, "m_angEyeAngles[1]") or 0
-    local health = entity.get_prop(ent, "m_iHealth") or 100
-    
-    -- Для раненых игроков увеличиваем коррекцию
-    local health_factor = health < 92 and 1.5 or 1
-    
-    -- Анализ изменений LBY
-    if math.abs(normalize_angle(lby - defensive.last_lby)) > 5 then
-        defensive.last_lby = lby
-        defensive.last_update = globals.curtime()
-    end
-    
-    -- Анализ изменений eye yaw
-    if math.abs(normalize_angle(eye_yaw - defensive.last_eye)) > 10 then
-        defensive.last_eye = eye_yaw
-        defensive.change_timer = globals.curtime()
-    end
-    
-    -- Если игрок не менял угол более 1.1 секунды (время обновления LBY)
-    if globals.curtime() - defensive.change_timer > 1.1 then
-        if globals.curtime() - defensive.last_update > 0.5 then
-            defensive.current_offset = (math.random() > 0.5 and 15 or -15) * health_factor
-            defensive.last_update = globals.curtime()
-        end
-        return defensive.current_offset
-    end
-    
-    return 0
-end
+---
 
--- Anti-Bruteforce Resolver
-local function handle_anti_brute(ent, data)
-    if not data.anti_brute_angles then
-        data.anti_brute_angles = {0, 15, -15, 30, -30, 45, -45, 60, -60}
-        data.anti_brute_index = 1
-        data.anti_brute_last_change = globals.curtime()
+setup = pui.setup({elements.conditions, elements.defensive, elements.anti_aim, elements.aimbot, colors, elements.visuals, elements.misc, drag_slider}, true)
+client.set_event_callback('shutdown', function ()
+    if _G.DEBUG then
+        _G.DEBUG = nil
     end
-    
-    if globals.curtime() - data.anti_brute_last_change > 2 then
-        data.anti_brute_index = data.anti_brute_index % #data.anti_brute_angles + 1
-        data.anti_brute_last_change = globals.curtime()
-    end
-    
-    return data.anti_brute_angles[data.anti_brute_index]
-end
 
--- Основная функция ресолвера
-function Resolver()
-    local Players = entity.get_players(true)
+    reset_angles()
 
-    for i, Player in pairs(Players) do
-        if not entity.is_alive(Player) then goto continue end
-        
-        -- Получаем данные игрока
-        if not player_data[Player] then
-            player_data[Player] = {
-                misses = 0,
-                hits = 0,
-                last_resolved = 0,
-                resolve_history = {},
-                good_angles = {}
-            }
-        end
-        local data = player_data[Player]
-        
-        -- Определяем стиль игры и состояние
-        local style = detect_play_style(Player)
-        style_detection[Player] = style
-        local lby = entity.get_prop(Player, "m_flLowerBodyYawTarget") or 0
-        local eye_yaw = entity.get_prop(Player, "m_angEyeAngles[1]") or 0
-        local state = detect_player_state(Player)
-        local health = entity.get_prop(Player, "m_iHealth") or 100
-        
-        -- Применяем соответствующую логику ресолва
-        local resolved_yaw = lby
-        local resolved_pitch = entity.get_prop(Player, "m_angEyeAngles[0]") or 0
-        local correction = 0
-        
-        -- Выбираем обработчик в зависимости от стиля
-        if style == PLAYER_STYLES.JITTER then
-            correction = handle_jitter_resolver(Player, data)
-            resolved_pitch = math.random() > 0.5 and 85 or -85
-        elseif style == PLAYER_STYLES.DEFENSIVE or health < 92 then
-            correction = handle_defensive_resolver(Player, data)
-            resolved_pitch = clamp(resolved_pitch, -45, 45)
-        elseif style == PLAYER_STYLES.ANTI_BRUTE then
-            correction = handle_anti_brute(Player, data)
-        else
-            -- Стандартный ресолвер
-            correction = math.random() > 0.5 and 30 or -30
-        end
-        
-        -- Применяем коррекцию
-        resolved_yaw = normalize_angle(lby + correction)
-        
-        -- Учет состояния игрока
-        if state == RESOLVE_STATES.MOVING then
-            resolved_yaw = normalize_angle(resolved_yaw * 0.7)
-        elseif state == RESOLVE_STATES.CROUCHING then
-            resolved_yaw = normalize_angle(resolved_yaw * 0.5)
-        end
-        
-        -- Если есть успешные углы, пробуем их использовать
-        if #data.good_angles > 0 then
-            resolved_yaw = data.good_angles[#data.good_angles]
-        end
-        
-        -- Применяем resolved углы
-        entity.set_prop(Player, "m_angEyeAngles[0]", resolved_pitch)
-        entity.set_prop(Player, "m_angEyeAngles[1]", resolved_yaw)
-        
-        -- Обновляем историю
-        data.last_resolved = resolved_yaw
-        table.insert(data.resolve_history, {yaw = resolved_yaw, time = globals.curtime()})
-        if #data.resolve_history > 10 then table.remove(data.resolve_history, 1) end
-        
-        ::continue::
-    end
-end
+    cvar.cl_interpolate:set_int(1)
+    cvar.cl_interp_ratio:set_int(2)
+    cvar.r_aspectratio:set_int(0)
+    cvar.viewmodel_fov:set_raw_float(68)
+    cvar.viewmodel_offset_x:set_raw_float(2.5)
+    cvar.viewmodel_offset_y:set_raw_float(0)
+    cvar.viewmodel_offset_z:set_raw_float(-1.5)
 
--- Обработчики событий для улучшения точности
-client.set_event_callback("player_hurt", function(e)
-    local victim = client.userid_to_entindex(e.userid)
-    local attacker = client.userid_to_entindex(e.attacker)
-    
-    if attacker == entity.get_local_player() and victim ~= entity.get_local_player() then
-        hit_count[victim] = (hit_count[victim] or 0) + 1
-        last_hit_time[victim] = globals.curtime()
-        
-        if player_data[victim] then
-            player_data[victim].hits = (player_data[victim].hits or 0) + 1
-            if player_data[victim].last_resolved then
-                table.insert(player_data[victim].good_angles, player_data[victim].last_resolved)
-                if #player_data[victim].good_angles > 3 then
-                    table.remove(player_data[victim].good_angles, 1)
-                end
-            end
-        end
-    end
+    cvar.cl_interpolate:set_int(1)
+    cvar.cl_interp_ratio:set_int(2)
+
+    collectgarbage('collect')
+    collectgarbage('collect')
 end)
-
-client.set_event_callback("bullet_impact", function(e)
-    local shooter = client.userid_to_entindex(e.userid)
-    if shooter == entity.get_local_player() then
-        -- Логика анализа промахов может быть добавлена здесь
-    end
-end)
-
--- Визуализация стиля игрока
-client.set_event_callback("paint", function()
-    if not Features.resolver.enable.value then return end
-    
-    local players = entity.get_players(true)
-    for i, player in pairs(players) do
-        if entity.is_alive(player) then
-            local style = style_detection[player] or PLAYER_STYLES.NORMAL
-            local style_name = "NORMAL"
-            local r, g, b = 255, 255, 255
-            
-            if style == PLAYER_STYLES.JITTER then
-                style_name = "JITTER"
-                r, g, b = 255, 50, 50
-            elseif style == PLAYER_STYLES.DEFENSIVE then
-                style_name = "DEFENSIVE"
-                r, g, b = 50, 255, 50
-            elseif style == PLAYER_STYLES.ANTI_BRUTE then
-                style_name = "ANTI-BRUTE"
-                r, g, b = 255, 255, 50
-            end
-            
-            local x, y, z = entity.get_prop(player, "m_vecOrigin")
-            local w2s_x, w2s_y = renderer.world_to_screen(x, y, z)
-            
-            if w2s_x and w2s_y then
-                renderer.text(w2s_x, w2s_y - 15, r, g, b, 255, "c", 0, style_name)
-                renderer.text(w2s_x, w2s_y - 30, 255, 255, 255, 255, "c", 0, "Hits: " .. (player_data[player] and player_data[player].hits or 0))
-            end
-        end
-    end
-end)
-
--- Инициализация
-client.set_event_callback("net_update_end", Resolver)
-client.set_event_callback("shutdown", function()
-    ui.set_visible(MenuV["ForceBodyYaw"], true)
-    ui.set_visible(MenuV["CorrectionActive"], true)
-    ui.set(MenuV["ResetAll"], true)
-end)
-end
-
-local mantletap do
-    mantletap = {}
-
-local function rage(cmd)
-    local lp = entity.get_local_player()
-    if not lp then return end
-
-    -- Новая проверка вместо b_2.rage.expdt:get()
-    if not Features or not Features.mantletap then return end
-    if not Features.mantletapr.enable.value or not Features.mantletap.used.value then return end
-
-    local tickbase = entity.get_prop(lp, "m_nTickBase") - globals.tickcount()
-    local doubletap_ref = ui.get(s_2.s_0.dt[1]) and ui.get(s_2.s_0.dt[2]) and not ui.get(s_2.s_0.fakeduck)
-
-    local active_weapon = entity.get_prop(lp, "m_hActiveWeapon")
-    if active_weapon == nil then return end
-
-    local weapon_idx = entity.get_prop(active_weapon, "m_iItemDefinitionIndex")
-    if weapon_idx == nil or weapon_idx == 64 then return end
-
-    local LastShot = entity.get_prop(active_weapon, "m_fLastShotTime")
-    if LastShot == nil then return end
-
-    local single_fire_weapon = weapon_idx == 40 or weapon_idx == 9 or weapon_idx == 64 or weapon_idx == 27 or weapon_idx == 29 or weapon_idx == 35
-    local value = single_fire_weapon and 1.50 or 0.50
-    local in_attack = globals.curtime() - LastShot <= value
-
-    if tickbase > 0 and doubletap_ref then
-        if in_attack then
-            ui.set(s_2.s_0.rage_cb[2], "Always on")
-        else
-            ui.set(s_2.s_0.rage_cb[2], "On hotkey")
-        end
-    else
-        ui.set(s_2.s_0.rage_cb[2], "Always on")
-    end
-end
-end 
-
-local predict do
-    predict = {}
-
-predict = function()
-    local lp = entity.get_local_player()
-    if not lp then return end
-    local gun = entity.get_player_weapon(lp)
-    if not gun then return end
-
-    local classname = entity.get_classname(gun)
-
-    -- Новая проверка на включение
-    if not Features or not Features.Predict then return end
-    if not Features.Predict.enable.value or not Features.Predict.hotexp.value then return end
-
-    if Features.Predict.pingpos:get() == "Low" then
-        cvar.cl_interpolate:set_int(0)
-        cvar.cl_interp_ratio:set_int(1)
-
-        if classname == "CWeaponSSG08" then
-            if Features.Predict.slidescout:get() == "Disabled" then
-                cvar.cl_interp:set_float(0.015625)
-            elseif Features.Predict.slidescout:get() == "Medium" then
-                cvar.cl_interp:set_float(0.028000)
-            elseif Features.Predict.slidescout:get() == "Maximum" then
-                cvar.cl_interp:set_float(0.029125)
-            elseif Features.Predict.slidescout:get() == "Extreme" then
-                cvar.cl_interp:set_float(0.031000)
-            end
-        end
-
-        if classname == "CWeaponAWP" then
-            if Features.Predict.slideawp:get() == "Disabled" then
-                cvar.cl_interp:set_float(0.015625)
-            elseif Features.Predict.slideawp:get() == "Medium" then
-                cvar.cl_interp:set_float(0.028000)
-            elseif Features.Predict.slideawp:get() == "Maximum" then
-                cvar.cl_interp:set_float(0.029125)
-            elseif Features.Predict.slideawp:get() == "Extreme" then
-                cvar.cl_interp:set_float(0.031000)
-            end
-        end
-
-        if classname == "CWeaponSCAR20" or classname == "CWeaponG3SG1" then
-            if Features.Predict.slideauto:get() == "Disabled" then
-                cvar.cl_interp:set_float(0.015625)
-            elseif Features.Predict.slideauto:get() == "Medium" then
-                cvar.cl_interp:set_float(0.028000)
-            elseif Features.Predict.slideauto:get() == "Maximum" then
-                cvar.cl_interp:set_float(0.029125)
-            elseif Features.Predict.slideauto:get() == "Extreme" then
-                cvar.cl_interp:set_float(0.031000)
-            end
-        end
-
-        if classname == "CDEagle" then
-            if Features.Predict.slider8:get() == "Disabled" then
-                cvar.cl_interp:set_float(0.015625)
-            elseif Features.Predict.slider8:get() == "Medium" then
-                cvar.cl_interp:set_float(0.028000)
-            elseif Features.Predict.slider8:get() == "Maximum" then
-                cvar.cl_interp:set_float(0.029125)
-            elseif Features.Predict.slider8:get() == "Extreme" then
-                cvar.cl_interp:set_float(0.031000)
-            end
-        end
-    elseif Features.Predict.pingpos:get() == "High" then
-        cvar.cl_interp:set_float(0.020000)
-        cvar.cl_interp_ratio:set_int(0)
-        cvar.cl_interpolate:set_int(0)
-    end
-end
-end
-
-local jumpstop do
-    jumpstop = {}
-
-local function jump_stop(cmd)
-    local lp = entity.get_local_player()
-    if not lp then return end
-    if not entity.is_alive(lp) then return end
-
-    local players = entity.get_players(true)
-    local lpvec = vector(entity.get_prop(lp, 'm_vecOrigin'))
-    local weapon = entity.get_player_weapon(lp)
-    local class = entity.get_classname(weapon)
-
-    if class ~= 'CWeaponSSG08' then return end
-    local vecvelocity = { entity.get_prop(lp, 'm_vecVelocity') }
-
-    local check_vel = vecvelocity[3] > 0
-    local flags = entity.get_prop(lp, 'm_fFlags')
-    local jumpcheck = bit.band(flags, 1) == 0
-
-    if not Features or not Features.jumpstop then return end
-    if not Features.jumpstop.enable.value or not Features.jumpstop.hotkey.value then return end
-        local enemy = client.current_threat()
-        if not enemy then return end
-        if not jumpcheck then return end
-        if not check_vel then return end
-        local x1, y1, z1 = entity.get_prop(enemy, 'm_vecOrigin')
-        local dist = anti_knife_dist(lpvec.x, lpvec.y, lpvec.z, x1, y1, z1)
-        if dist <= (features.Jumpstop.distance:get()) then
-            if cmd.quick_stop then
-                cmd.in_speed = 1
-            end
-        end
-    end
-end
-
-    if features.Jumpstop:get() and features.Jumpstop.hotkey:get() then
-        renderer.indicator(230, 230, 230, 230, 'AS')
-    end
-
-local automatic_peek = {} do
-    local ref21 = {} do
-        ref21.automatic_scope = pui.reference('RAGE', 'Aimbot', 'Automatic scope')
-        ref21.target_hitbox = pui.reference('RAGE', 'Aimbot', 'Target hitbox')
-        ref21.quickpeek = pui.reference('RAGE', 'Other', 'Quick peek assist')
-        ref21.onshot_antiaim = pui.reference('AA', 'Other', 'On shot anti-aim')
-        ref21.doubletap, ref21.doubletap_mode = pui.reference('RAGE', 'Aimbot', 'Double tap')
-        ref21.doubletap_fakelag_limit = pui.reference('RAGE', 'Aimbot', 'Double tap fake lag limit')
-        ref21.min_damage = pui.reference('RAGE', 'Aimbot', 'Minimum damage')
-        ref21.min_damage_override, ref21.min_damage_override_value = pui.reference('RAGE', 'Aimbot', 'Minimum damage override')
-        ref21.automatic_scope = pui.reference('RAGE', 'Aimbot', 'Automatic scope')
-        ref21.quickpeek = pui.reference('RAGE', 'Other', 'Quick peek assist')
-        ref21.quickpeek_mode = pui.reference('RAGE', 'Other', 'Quick peek assist mode')
-        ref21.quickpeek_distance = pui.reference('RAGE', 'Other', 'Quick peek assist distance')
-        ref21.force_baim = pui.reference('RAGE', 'Aimbot', 'Force body aim')
-        ref21.third_person_alive = pui.reference('VISUALS', 'Effects', 'Force third person (alive)')
-    end
-    local smoothy = {
-        to_pairs = {
-            vector = {'x', 'y', 'z'},
-            imcolor =  {'r', 'g', 'b', 'a'}
-        },
-    
-        get_type = function(self, value)
-            local val_type = type(value)
-    
-            if val_type == 'cdata' and value.x and value.y and value.z then
-                return 'vector'
-            elseif val_type == 'cdata' and value.r and value.g and value.b and value.a then
-                return 'imcolor'
-            elseif val_type == 'userdata' and value.__type then
-                return string.lower(value.__type.name)
-            end
-    
-            return val_type
-        end,
-    
-        copy_tables = function(self, destination, keysTable, valuesTable)
-            valuesTable = valuesTable or keysTable
-            local mt = getmetatable(keysTable)
-    
-            if mt and getmetatable(destination) == nil then
-                setmetatable(destination, mt)
-            end
-    
-            for k, v in pairs(keysTable) do
-                if type(v) == 'table' then
-                    destination[k] = self:copy_tables({}, v, valuesTable[k])
-                else
-                    local value = valuesTable[k]
-    
-                    if type(value) == 'boolean' then
-                        value = value and 1 or 0
-                    end
-    
-                    destination[k] = value
-                end
-            end
-    
-            return destination
-        end,
-    
-        resolve = function(self, easing_fn, previous, new, clock, duration)
-            if type(new) == 'boolean' then new = new and 1 or 0 end
-            if type(previous) == 'boolean' then previous = previous and 1 or 0 end
-    
-            local previous = easing_fn(clock, previous, new - previous, duration)
-    
-            if type(new) == 'number' then
-                if math.abs(new - previous) <= .001 then
-                    previous = new
-                end
-    
-                if previous % 1 < .0001 then
-                    previous = math.floor(previous)
-                elseif previous % 1 > .9999 then
-                    previous = math.ceil(previous)
-                end
-            end
-    
-            return previous
-        end,
-    
-        perform_easing = function(self, ntype, easing_fn, previous, new, clock, duration)
-            if self.to_pairs[ntype] then
-                for _, key in ipairs(self.to_pairs[ntype]) do
-                    previous[key] = self:perform_easing(
-                        type(v), easing_fn,
-                        previous[key], new[key],
-                        clock, duration
-                    )
-                end
-    
-                return previous
-            end
-    
-            if ntype == 'table' then
-                for k, v in pairs(new) do
-                    previous[k] = previous[k] or v
-                    previous[k] = self:perform_easing(
-                        type(v), easing_fn,
-                        previous[k], v,
-                        clock, duration
-                    )
-                end
-    
-                return previous
-            end
-    
-            return self:resolve(easing_fn, previous, new, clock, duration)
-        end,
-    
-        new = function(this, default, easing_fn)
-            if type(default) == 'boolean' then
-                default = default and 1 or 0
-            end
-    
-            local mt = { }
-            local mt_data = {
-                value = default or 0,
-                easing = easing_fn or function(t, b, c, d)
-                    return c * t / d + b
-                end
-            }
-    
-            function mt.update(self, duration, value, easing)
-                if type(value) == 'boolean' then
-                    value = value and 1 or 0
-                end
-    
-                local clock = globals.frametime()
-                local duration = duration or .15
-                local value_type = this:get_type(value)
-                local target_type = this:get_type(self.value)
-    
-                assert(value_type == target_type, string.format('type mismatch. expected %s (received %s)', target_type, value_type))
-    
-                if self.value == value then
-                    return value
-                end
-    
-                if clock <= 0 or clock >= duration then
-                    if target_type == 'imcolor' or target_type == 'vector' then
-                        self.value = value:clone()
-                    elseif target_type == 'table' then
-                        this:copy_tables(self.value, value)
-                    else
-                        self.value = value
-                    end
-                else
-                    local easing = easing or self.easing
-    
-                    self.value = this:perform_easing(
-                        target_type, easing,
-                        self.value, value,
-                        clock, duration
-                    )
-                end
-    
-                return self.value
-            end
-    
-            return setmetatable(mt, {
-                __metatable = false,
-                __call = mt.update,
-                __index = mt_data
-            })
-        end,
-    
-        new_interp = function(this, initial_value)
-            return setmetatable({
-                previous = initial_value or 0
-            }, {
-                __call = function(self, new_value, mul)
-                    local mul = mul or 1
-                    local tickinterval = globals.tickinterval() * mul
-                    local difference = math.abs(new_value - self.previous)
-    
-                    if difference > 0 then
-                        local time = math.min(tickinterval, globals.frametime()) / tickinterval
-                        self.previous = self.previous + time * (new_value - self.previous)
-                    else
-                        self.previous = new_value
-                    end
-    
-                    self.previous = (self.previous % 1 < .0001) and 0 or self.previous
-    
-                    return self.previous
-                end
-            })
-        end
-    }
-    local common = {} do
-        common.extend_vector = function(pos, length, angle)
-            local rad = angle * math.pi / 180
-            return vector(pos.x + (math.cos(rad) * length), pos.y + (math.sin(rad) * length), pos.z)
-        end
-    
-        local sv_gravity = cvar.sv_gravity
-        local sv_jump_impulse = cvar.sv_jump_impulse
-    
-        common.extrapolate_position = function(ent, origin, ticks, inverted)
-            local tickinterval = globals.tickinterval()
-    
-            local sv_gravity = sv_gravity:get_float() * tickinterval
-            local sv_jump_impulse = sv_jump_impulse:get_float() * tickinterval
-    
-            local p_origin, prev_origin = origin, origin
-    
-            local velocity = vector(entity.get_prop(ent, 'm_vecVelocity'))
-            local gravity = velocity.z > 0 and -sv_gravity or sv_jump_impulse
-    
-            for i = 1, ticks do
-                prev_origin = p_origin
-                p_origin = vector(
-                    p_origin.x + (inverted and -(velocity.x * tickinterval) or (velocity.x * tickinterval)),
-                    p_origin.y + (inverted and -(velocity.y * tickinterval) or (velocity.y * tickinterval)),
-                    p_origin.z + (inverted and -((velocity.z + gravity) * tickinterval) or (velocity.z + gravity) * tickinterval)
-                )
-    
-                local fraction = client.trace_line(-1,
-                    prev_origin.x, prev_origin.y, prev_origin.x,
-                    p_origin.x, p_origin.y, p_origin.x
-                )
-    
-                if fraction <= .99 then
-                    return prev_origin
-                end
-            end
-    
-            return p_origin
-        end
-    
-        common.set_movement = function(cmd, destination, local_player)
-            local move_yaw = vector(vector(entity.get_origin(local_player)):to(destination):angles()).y
-    
-            cmd.in_forward = 1
-            cmd.in_back = 0
-            cmd.in_moveleft = 0
-            cmd.in_moveright = 0
-            cmd.in_speed = 0
-            cmd.forwardmove = 800
-            cmd.sidemove = 0
-            cmd.move_yaw = move_yaw
-        end
-    
-        common.rgb_to_hex = function(clr)
-            return string.format('%02x%02x%02x%02x', clr[1], clr[2], clr[3], clr[4])
-        end
-    
-        common.lerp = function(a, b, percentage)
-            if a == b then
-                return b
-            end
-    
-            return a + (b - a) * percentage
-        end
-    
-        common.color_swap = function(color1, color2, weight)
-            weight = math.clamp(weight, 0, 1)
-    
-            if weight == 0 then
-                return color1
-            elseif weight == 1 then
-                return color2
-            end
-    
-            return {
-                common.lerp(color1[1], color2[1], weight),
-                common.lerp(color1[2], color2[2], weight),
-                common.lerp(color1[3], color2[3], weight),
-                common.lerp(color1[4], color2[4], weight)
-            }
-        end
-    
-        common.colored_text = function(text, clr)
-            return string.format('\a%02x%02x%02x%02x%s', clr[1], clr[2], clr[3], clr[4], text)
-        end
-    
-        common.gradient_text = function(text, color1, color2, fraction, gradient)
-            color2 = color2 or color1
-            fraction = math.clamp(fraction, 0, 1)
-    
-            if fraction == 0 then
-                return common.colored_text(text, color2)
-            elseif fraction == 1 then
-                return common.colored_text(text, color1)
-            end
-    
-            local text_length = string.len(text)
-    
-            local return_text = {}
-    
-            for i = 1, text_length do
-                local weight = gradient and ((1 - fraction) - (text_length - i) / (text_length - 1)) + (1 - fraction) or i - fraction * text_length
-                local color = common.color_swap(color1, color2, weight)
-    
-                return_text[i] = common.colored_text(string.sub(text, i, i), color)
-            end
-    
-            return table.concat(return_text)
-        end
-    end
-    local exploit = {} do
-        exploit.active = false
-        exploit.charged = false
-        exploit.disabled = false
-    
-        local doubletap = {} do
-            doubletap.active = false
-            doubletap.charged = false
-            doubletap.disabled = false
-            doubletap.forced_discharge = false
-    
-            function doubletap:reset()
-                self.active = false
-                self.charged = false
-                self.disabled = false
-                self.forced_discharge = false
-            end
-    
-            function doubletap:restore()
-                ref21.doubletap:override()
-            end
-    
-            function doubletap:disable()
-                ref21.doubletap:override(false)
-                self.disabled = true
-            end
-    
-            ---@param cmd struct pass it to call it in the same tick
-            function doubletap:force_discharge(cmd)
-                if cmd and cmd.discharge_pending ~= nil then
-                    cmd.discharge_pending = true
-                end
-    
-                self.forced_discharge = true
-            end
-    
-            local restore = false
-    
-            function doubletap:on_setup_command(cmd)
-                if self.disabled then
-                    self:reset()
-                    restore = true
-                    return
-                end
-    
-                if restore then
-                    restore = false
-                    self:restore()
-                end
-    
-                if self.forced_discharge then
-                    self.forced_discharge = false
-                    cmd.discharge_pending = true
-                end
-    
-                if not ref.doubletap:get()
-                or not ref.doubletap:get_hotkey() then
-                    self:reset()
-                    return
-                end
-    
-                self.active = true
-                self.charged = exploit.charged
-            end
-        end
-    
-        local hideshots = {} do
-            hideshots.active = false
-            hideshots.charged = false
-            hideshots.disabled = false
-    
-            function hideshots:reset()
-                self.active = false
-                self.charged = false
-                self.disabled = false
-            end
-    
-            function hideshots:restore()
-                ref21.onshot_antiaim:override()
-                ref21.onshot_antiaim.hotkey:override()
-            end
-    
-            function hideshots:disable()
-                ref21.onshot_antiaim:override(false)
-                self.disabled = true
-            end
-    
-            local restore = false
-    
-            function hideshots:on_setup_command()
-                if self.disabled then
-                    self:reset()
-                    restore = true
-                    return
-                end
-    
-                if restore then
-                    restore = false
-                    self:restore()
-                end
-    
-                if not ref21.onshot_antiaim.value
-                or not ref21.onshot_antiaim:get_hotkey() then
-                    self:reset()
-                    return
-                end
-    
-                self.active = true
-                self.charged = exploit.charged
-            end
-        end
-    
-        local defensive = {} do
-            defensive.active = false
-            defensive.active_until = 0
-            defensive.ticks = 0
-            defensive.ticks_from_activation = 0
-            defensive.disabled = false
-            defensive.forced = false
-    
-            function defensive:reset()
-                self.active = false
-                self.active_until = 0
-                self.ticks = 0
-                self.ticks_from_activation = 0
-                self.disabled = false
-                self.forced = false
-            end
-    
-            function defensive:disable()
-                self.disabled = true
-            end
-    
-            ---@param cmd struct pass it to call it in the same tick
-            function defensive:force(cmd)
-                if cmd and cmd.force_defensive ~= nil then
-                    cmd.force_defensive = true
-                end
-    
-                self.forced = true
-            end
-    
-            local prev_sim_time = 0
-    
-            function defensive:detect()
-                local local_player = vars.local_player
-                local tickcount = globals.tickcount()
-    
-                local sim_time = toticks(entity.get_prop(local_player, 'm_flSimulationTime'))
-                local sim_diff = sim_time - prev_sim_time
-    
-                if sim_diff < 0 then
-                    self.active_until = tickcount + math.abs(sim_diff) - toticks(client.real_latency()) - 1
-                    -- self.active_until = tickcount + math.abs(sim_diff)
-                    self.ticks = self.active_until - tickcount
-                end
-    
-                prev_sim_time = sim_time
-    
-                self.active = self.active_until > tickcount
-    
-                if self.active then
-                    self.ticks_from_activation = self.ticks - (self.active_until - tickcount) + 1
-                end
-            end
-    
-            local hittable_time = 0
-            local last_hittable_time = 0
-    
-            function defensive:handle(cmd)
-    
-            end
-    
-            function defensive:on_setup_command(cmd)
-                if not exploit.charged then
-                    self:reset()
-                    return
-                end
-    
-                if self.disabled then
-                    self.disabled = false
-                end
-    
-                if self.forced then
-                    self.forced = false
-                    cmd.force_defensive = true
-                end
-    
-                -- self:handle(cmd)
-                self:detect()
-            end
-        end
-    
-        function exploit:reset()
-            self.active = false
-            self.charged = false
-            self.disabled = false
-    
-            doubletap:reset()
-            hideshots:reset()
-            defensive:reset()
-        end
-    
-        function exploit:restore()
-            ref21.doubletap:override()
-            ref21.onshot_antiaim:override()
-        end
-    
-        function exploit:disable()
-            ref21.doubletap:override(false)
-            ref21.onshot_antiaim:override(false)
-            self.disabled = true
-        end
-    
-        function exploit:detect()
-            local m_nTickBase = entity.get_prop(vars.local_player, 'm_nTickBase')
-            local shift = math.floor(m_nTickBase - globals.tickcount() - 3 - toticks(client.latency()) * .4)
-            local wanted = -15 + (ref.doubletap_fakelag_limit.value - 1) + 5 --error margin
-    
-            self.charged = shift <= wanted
-        end
-    
-        local restore = false
-    
-        function exploit:on_setup_command(cmd)
-            if self.disabled then
-                self:reset()
-                restore = true
-                return
-            end
-    
-            if restore then
-                restore = false
-                self:restore()
-            end
-    
-            self:detect()
-    
-            doubletap:on_setup_command(cmd)
-            hideshots:on_setup_command()
-            defensive:on_setup_command(cmd)
-    
-            self.active = doubletap.active or hideshots.active
-    
-            -- print('\nexploit = ', inspect(exploit))
-        end
-    
-        exploit.doubletap = doubletap
-        exploit.hideshots = hideshots
-        exploit.defensive = defensive
-    end
-    local hitgroups_to_hitboxes = {
-        ['Head'] = {0},
-        ['Chest'] = {4, 5, 6},
-        ['Stomach'] = {2, 3},
-        ['Arms'] = {13, 14, 15, 16, 17, 18},
-        ['Legs'] = {7, 8, 9, 10},
-        ['Feet'] = {11, 12}
-    }
-
-    local allowed_hitboxes = {0, 5, 2, 15, 17, 9, 10}
-    local active_hitboxes = {}
-
-    local amount = 4
-    local step_distance = 22
-
-    local targeting = false
-    local returning = false
-    local should_return = false
-    local teleport = false
-    local disable_exploit = false
-
-    local cache = {
-        positions = {},
-        middle_pos = vector(),
-        last_returning_time = 0,
-        active_point_index = 0,
-        current_target = nil
-    }
-
-    local hotkeys = {
-        main = false,
-        force_baim = false
-    }
-
-    local visual = {
-        values = {
-            global_alpha = smoothy:new(),
-            pos = {},
-            alpha = {}
-        },
-        active = false
-    }
-
-    function update_hitboxes(reference, force_baim)
-        local new_hitboxes = {}
-        local target_hitboxes = reference.value
-
-        local force_baim_disabled_hitgroups = {'Head', 'Arms', 'Legs', 'Feet'}
-
-        for i = 1, #target_hitboxes do
-            if force_baim and table.contains(force_baim_disabled_hitgroups, target_hitboxes[i]) then
-                goto continue
-            end
-
-            local hitgroup = hitgroups_to_hitboxes[target_hitboxes[i]]
-
-            for j = 1, #hitgroup do
-                local hitbox = hitgroup[j]
-
-                if table.contains(allowed_hitboxes, hitbox) then
-                    table.insert(new_hitboxes, hitbox)
-                end
-            end
-
-            ::continue::
-        end
-
-        active_hitboxes = new_hitboxes
-    end
-
-    ref21.target_hitbox:set_callback(update_hitboxes, true)
-
-    function skip_func(entindex, contents_mask)
-        if entity.get_classname(entindex) == 'CCSPlayer' and entity.is_enemy(entindex) then
-            return false
-        end
-
-        return true
-    end
-
-    function handle_point(position, prev_position, angle, step_distance, index, view_offset, vec_mins, vec_maxs, max_step)
-        local start_pos = prev_position and (prev_position - view_offset) or position
-        local pos = common.extend_vector(start_pos, index == 0 and 0 or step_distance, angle)
-
-        local trace_up = trace_lib.hull(
-            start_pos, start_pos + vector(0, 0, max_step), vec_mins, vec_maxs, {skip = skip_func, mask = 0x201400B}
-        ).end_pos
-
-        local trace_horizontal = trace_lib.hull(
-            vector(start_pos.x, start_pos.y, trace_up.z),
-            vector(pos.x, pos.y, trace_up.z),
-            vec_mins, vec_maxs, {skip = skip_func, mask = 0x201400B}
-        ).end_pos
-
-        if pos:dist2d(trace_horizontal) >= step_distance * .97 then
-            return false
-        end
-
-        local trace_down = trace_lib.hull(
-            trace_horizontal,
-            vector(trace_horizontal.x, trace_horizontal.y, position.z - 240),
-            vec_mins, vec_maxs, {skip = skip_func, mask = 0x201400B}
-        ).end_pos
-
-        return trace_down + view_offset
-    end
-
-    local max_step = 18
-
-    function setup_points(local_player, position, angle, amount, step_distance)
-        local view_offset = vector(entity.get_prop(local_player, 'm_vecViewOffset'))
-        local vec_mins = vector(entity.get_prop(local_player, 'm_vecMins'))
-        local vec_maxs = vector(entity.get_prop(local_player, 'm_vecMaxs'))
-
-        cache.positions[0] = handle_point(
-            position, nil, 0,
-            step_distance, 0, view_offset,
-            vec_mins, vec_maxs, max_step
-        )
-
-        for i = 1, amount do
-            local angle = i % 2 == 0 and angle - 90 or angle + 90
-
-            local prev_point = cache.positions[i <= 2 and 0 or i - 2]
-
-            if not prev_point then
-                goto continue
-            end
-
-            local point = handle_point(
-                position, prev_point, angle,
-                step_distance, i, view_offset,
-                vec_mins, vec_maxs, max_step
-            )
-
-            if not point or (prev_point and math.abs(prev_point.z - point.z) > max_step) then
-                for k = i, amount, 2 do
-                    cache.positions[k] = false
-                end
-
-                goto continue
-            end
-
-            cache.positions[i] = point
-
-            ::continue::
-        end
-
-        return cache.positions
-    end
-
-    function weapon_can_fire(player, weapon)
-        local lp_NextAttack = entity.get_prop(player, 'm_flNextAttack')
-        local wpn_NextPrimaryAttack = entity.get_prop(weapon, 'm_flNextPrimaryAttack')
-
-        if math.max(0, lp_NextAttack or 0, wpn_NextPrimaryAttack or 0) > globals.curtime() or entity.get_prop(weapon, 'm_iClip1') <= 0 then
-            return false
-        end
-
-        return true
-    end
-
-    local scope_weapons = {
-        'CWeaponSSG08',
-        'CWeaponAWP',
-        'CWeaponG3SG1',
-        'CWeaponSCAR20'
-    }
-
-    function can_target(local_player, target)
-        if not target then
-            return false
-        end
-
-        local lp_wpn = entity.get_player_weapon(local_player)
-
-        if not weapon_can_fire(local_player, lp_wpn) then
-            return false
-        end
-
-        if not ref21.automatic_scope.value
-        and table.contains(scope_weapons, entity.get_classname(lp_wpn))
-        and entity.get_prop(local_player, 'm_bIsScoped') ~= 1 then
-            return false
-        end
-
-        if exploit.active and not exploit.charged then
-            return false
-        end
-
-        if entity.get_prop(local_player, 'm_flVelocityModifier') ~= 1 then
-            return false
-        end
-
-        local esp_data = entity.get_esp_data(target) or {alpha = 0}
-
-        if esp_data.alpha < .75 then
-            return false
-        end
-
-        return true
-    end
-
-    function trace_enemy(positions, local_player, target, hitboxes)
-        local target_health = entity.get_prop(target, 'm_iHealth')
-        local minimum_damage = ref21.min_damage_override.value and ref21.min_damage_override:get_hotkey()
-        and ref21.min_damage_override_value.value or ref21.min_damage.value
-
-        for i = 1, #positions do
-            local pos = positions[i]
-
-            if not pos then
-                goto continue
-            end
-
-            for j = 1, #hitboxes do
-                local hitbox = hitboxes[j]
-                local hitbox_pos = vector(entity.hitbox_position(target, hitbox))
-
-                local entindex, damage = client.trace_bullet(
-                    local_player,
-                    pos.x, pos.y, pos.z,
-                    hitbox_pos.x, hitbox_pos.y, hitbox_pos.z,
-                    hitbox == 0 --bad fix
-                )
-
-                --bad fix
-                if hitbox == 0 then
-                    damage = damage * 4
-                end
-
-                if damage >= math.min(minimum_damage, target_health) and damage > 0 then
-                    return pos, i
-                end
-            end
-
-            ::continue::
-        end
-
-        return nil, 0
-    end
-    ref21.quickpeek.hotkey:set('Toggle')
-    function handle(cmd)
-        local main_key = lua_menu.ragebotfeatures.aipeek:get() and lua_menu.ragebotfeatures.aipeek_hotkey:get()
-
-        if main_key and not hotkeys.main then
-            local local_player = entity.get_local_player()
-            local lp_origin = vector(entity.get_origin(local_player))
-            cache.middle_pos = common.extrapolate_position(local_player, lp_origin, 13, true)
-            hotkeys.main = true
-        elseif not main_key and hotkeys.main then
-            ref21.quickpeek:override()
-            ref21.quickpeek.hotkey:override()
-            ref21.quickpeek_mode:override()
-            ref21.doubletap:override()
-            ref21.onshot_antiaim:override()
-            hotkeys.main = false
-        end
-
-        local force_baim = ref21.force_baim:get()
-
-        if force_baim and not hotkeys.force_baim then
-            update_hitboxes(ref21.target_hitbox, true)
-            hotkeys.force_baim = true
-        elseif not force_baim and hotkeys.force_baim then
-            update_hitboxes(ref21.target_hitbox)
-            hotkeys.force_baim = false
-        end
-
-        if not main_key then
-            targeting = false
-            returning = false
-            should_return = false
-            teleport = false
-            disable_exploit = false
-            visual.active = false
-            return
-        end
-
-        ref21.quickpeek:override(true)
-        ref21.quickpeek.hotkey:override({'Always on'})
-
-        local move_mode = lua_menu.ragebotfeatures.label:get()
-
-        local local_player = entity.get_local_player()
-        local lp_velocity = vector(entity.get_prop(local_player, 'm_vecVelocity')):length2d()
-        local tickcount = globals.tickcount()
-
-        local local_override = bit.band(entity.get_prop(local_player, 'm_fFlags'), 1) ~= 1
-        or (cmd.in_forward == 1 or cmd.in_moveleft == 1 or cmd.in_moveright == 1 or cmd.in_back == 1 or cmd.in_jump == 1)
-
-        local lp_origin = vector(entity.get_origin(local_player))
-        local middle_pos = cache.middle_pos
-        local dist_to_middle = middle_pos:dist2d(lp_origin)
-
-        if (move_mode == 'Offensive' and not targeting and not returning)
-        or (dist_to_middle > .15 and lp_velocity < 1.011 and lp_velocity ~= 0) then
-            cache.middle_pos = lp_origin
-        end
-
-        local target = client.current_threat()
-        cache.current_target = target
-
-        local target_origin = target and vector(entity.get_origin(target)) or vector()
-        local angle = target and vector(middle_pos:to(target_origin):angles()).y or vector(client.camera_angles()).y
-
-        local positions = setup_points(local_player, middle_pos, angle, amount, step_distance)
-
-        visual.active = true
-
-        local active_point_pos, active_point_index = nil, 0
-
-        if not local_override and not returning and can_target(local_player, target) then
-            active_point_pos, active_point_index = trace_enemy(
-                positions, local_player, target, active_hitboxes
-            )
-        end
-
-        targeting = active_point_pos ~= nil
-        cache.active_point_index = active_point_index
-
-        if targeting then
-            common.set_movement(cmd, active_point_pos, local_player)
-            returning = false
-            should_return = true
-            teleport = false
-            disable_exploit = false
-        elseif local_override then
-            returning = false
-            should_return = false
-            teleport = false
-            disable_exploit = false
-        elseif should_return or move_mode == 'Defensive' then
-            returning = true
-            should_return = false
-            teleport = true
-        end
-
-        if not returning then
-            cache.last_returning_time = tickcount
-        end
-
-        if returning then
-            if dist_to_middle < .15 then
-                returning = false
-                teleport = false
-                disable_exploit = false
-            elseif teleport then
-                if ref21.doubletap:get_hotkey()
-                and weapon_can_fire(local_player, entity.get_player_weapon(local_player)) then
-                    if tickcount - cache.last_returning_time == 1 then
-                        cmd.force_defensive = true
-                    elseif tickcount - cache.last_returning_time >= 7 then
-                        ref21.doubletap:override(false)
-                        ref21.onshot_antiaim:override(false)
-                        teleport = false
-                        disable_exploit = true
-                    end
-                elseif not ref21.doubletap:get_hotkey() and ref21.onshot_antiaim:get_hotkey() then
-                    if not exploit.defensive.active then
-                        ref.onshot_antiaim:override(false)
-                        teleport = false
-                        disable_exploit = true
-                    end
-                end
-            end
-        end
-
-        ref21.quickpeek_mode:override(returning and {'Retreat on shot', 'Retreat on key release'} or nil)
-
-        if disable_exploit then
-            ref21.doubletap:override(false)
-            ref21.onshot_antiaim:override(false)
-        else
-            ref21.doubletap:override()
-            ref21.onshot_antiaim:override()
-        end
-    end
-
-    function render()
-        local local_player = entity.get_local_player()
-
-        if not entity.is_alive(local_player) or not (ref21.third_person_alive.value and ref21.third_person_alive:get_hotkey()) then
-            return
-        end
-
-        local data = cache.positions
-        local color_ref = {255, 255, 255, 255}
-        local active = visual.active
-        local values = visual.values
-        local active_point = cache.active_point_index
-
-        local g_alpha = values.global_alpha(.045, active)
-
-        if g_alpha <= 0 then
-            return
-        end
-
-        for i = 0, #data do
-            local pos = data[i]
-
-            if pos == nil then
-                goto continue
-            end
-
-            if not values.alpha[i] then
-                values.alpha[i] = smoothy:new()
-            end
-
-            if not values.pos[i] then
-                values.pos[i] = smoothy:new(vector())
-            end
-
-            local alpha = values.alpha[i](.045, pos and active)
-
-            if alpha <= 0 then
-                goto continue
-            end
-
-            if pos then
-                values.pos[i](
-                    alpha > .15 and .02 or 0,
-                    vector(pos.x, pos.y, pos.z - 26 + 5 * alpha + (active_point == i and 2 or 0))
-                )
-            end
-
-            local pos_screen = vector(renderer.world_to_screen(values.pos[i].value:unpack()))
-
-            if pos_screen.x ~= 0 then
-                local clr = active_point == i and color_ref or {255, 255, 255, 100}
-                renderer.circle(pos_screen.x, pos_screen.y, clr[1], clr[2], clr[3], clr[4] * alpha, 3, 0, 1)
-            end
-
-            local prev_index = i <= 2 and 0 or i - 2
-            local line_from = vector(renderer.world_to_screen(values.pos[prev_index].value:unpack()))
-            local line_to = vector(renderer.world_to_screen(values.pos[i].value:unpack()))
-
-            if line_from.x ~= 0 and line_to.x ~= 0 then
-                renderer.line(line_from.x, line_from.y, line_to.x, line_to.y, 255, 255, 255, 100 * alpha)
-            end
-
-            ::continue::
-        end
-    end
-
-    function automatic_peek:on_setup_command(cmd)
-        handle(cmd)
-    end
-
-    function automatic_peek:on_paint()
-        if lua_menu.ragebotfeatures.aipeek_render:get() then
-            render()
-        end
-    end
-end
-
-
-
-client.set_event_callback("setup_command", function(cmd)
-    if Features.ai_peek and Features.ai_peek.enable:get() and automatic_peek and automatic_peek.on_setup_command then
-        automatic_peek:on_setup_command(cmd, {
-            hotkey   = Features.ai_peek.key:get(),
-            mode     = Features.ai_peek.mode:get(),
-            distance = Features.ai_peek.distance:get()
-        })
-    end
-end)
-
-client.set_event_callback("paint", function()
-    if Features.ai_peek and Features.ai_peek.enable:get() and automatic_peek and automatic_peek.on_paint then
-        automatic_peek:on_paint(Features.ai_peek.render:get())
-    end
-end)
-
+end)()

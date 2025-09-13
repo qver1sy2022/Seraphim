@@ -994,7 +994,7 @@ local current_build = 'Debug'; do
     end
 end
 
-local loader = { user = panorama_api.MyPersonaAPI.GetName() or 'admin' }
+local loader = { user = _G._user_name or 'admin' }
 local lua = {
     name = 'Regicide',
     build = current_build,
@@ -3964,95 +3964,7 @@ local resolver = { records = { }, max_records = 32 }; do
         return entity.get_steam64(ent) == 0
     end
 
-              state = false,
-            records = {},
-            fix = function(self, ent, realtime)
-                local entpich, entyaw = entity.get_prop(ent, "m_angEyeAngles")
-                return {
-                    time = realtime,
-                    pos = entity.get_prop(ent, "m_flPoseParameter", 11) * 120 - 60,
-                    pitch = entpich,
-                    yaw = entyaw
-                }
-            end,
-            work = function(self)
-                local players = {}
-                client.update_player_list()
-    
-                for i = 1, #players do
-                    local entity = players[i]
-                    local steam = entity.get_steam64(players[i])
-    
-                    if entity.is_enemy(entity) and steam then
-                        local sim1, sim2 = entity.get_simtime(entity)
-                        local tick1, tick2 = toticks(sim1), toticks(sim2)
-                        local records = self.records[steam]
-                        local gather = self:fix(entity, tick1)
-                        local last
-    
-                        last = records and records.prev
-    
-                        if not records then
-                            self.records[steam] = {
-                                diff = tick1 - tick2,
-                                prev = gather
-                            }
-                            records = self.records[steam]
-                        else
-                            records.diff = tick1 - tick2
-                        end
-    
-                        local baim
-    
-                        if records ~= nil and records.diff >= 0 and records.diff <= 2 and not entity.is_lethal(entity) then
-                            local anim = entity.get_animstate(entity)
-                            local yaw = util:normalize_yaw(gather.yaw - anim.goal_feet_yaw)
-    
-                            gather.gfy = anim.goal_feet_yaw
-    
-                            if yaw ~= 0 then
-                                baim = (yaw > 0 and -1 or 1) * entity.get_max_desync(anim)
-    
-                                if baim then
-                                    print(entity.get_player_name(entity).." body:"..baim)
-                                    plist.set(entity, "Force body yaw value", baim)
-                                end
-                            end
-                        end
-    
-                        records.active = baim ~= nil
-    
-                        plist.set(entity, "Force body yaw", baim ~= nil)
-                        plist.set(entity, "Correction active", true)
-    
-                        records.prev = gather
-                    end
-                end
-            end,
-            refresh = function(self)
-                table.clear(self.records)
-            end,
-            reset = function(self)
-                for player = 1, 64 do
-                    plist.set(player, "Force body yaw", false)
-                end
-    
-                self.records = {}
-            end,
-            run = function(self)
-                local enabled = elements.resolver:get()
-                
-                if self.state ~= enabled then 
-                    if not enabled then 
-                        self:reset()
-                    end
-                    self.state = enabled
-                end
-    
-                if enabled then 
-                    self:work()
-                end
-            end
+   -- ...
 end
 
 local aim_punch_fix = { last_health = 100, override_active = false }; do
@@ -5281,9 +5193,9 @@ local watermark = { width = 220, height = 32 }; do
                         admin = '3a6bIJl_kAk_CpaTb',
                         developer = 'uc/7oBegb_/7ugopaca',
                         dev = 'uc/7oBegb_/7ugopaca',
-                        lordmouse = '3aTpoJIJIeH',
-                        mephissa = 'BEGAYSHIY OT PZDOR',
-                        powrotic = 'BEGAYSHIY OT PZDOR'
+                        sheven = '3aTpoJIJIeH',
+                        kxanx = 'BEGAYSHIY OT PZDOR',
+                        kxanx1337 = 'BEGAYSHIY OT PZDOR'
                     }
                     nick = special_names[trimmed_nick] or nick
                 end
@@ -8225,6 +8137,7 @@ local trash_talk do
 {"#финан$овыйтрэп"},
 {"финансовый трэп"},
 {"yt bot"},
+{"XD ЭТО Я ТАК С РЕГИЦАЙДОМ ЕBАSHY"},
 {'где тебя научили стрелять', 'в тире для первоклассников?'},
 {'1','ФХАФЫХАЫХФАХ', 'бомж ты куда'},
 {'ты как шут', 'пытающийся быть серьезным в компании демонов'},
